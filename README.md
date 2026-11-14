@@ -19,8 +19,8 @@ This repo holds only code every city shares:
   calls: `ingest.yml`, `refine.yml`, and `city-test.yml`.
 
 Each city has its own repo (such as weekendboise) holding everything specific to that city:
-`city.json`, `ingestion/sources.json`, `data/`, `website/hugo.toml`, `website/wrangler.jsonc`,
-favicons and branding, thin workflows that call the engine's, and the city's docs. City facts
+`city.json`, `ingestion/sources.json`, `data/`, `website/wrangler.jsonc`, favicons and
+branding (`website/static/`, `website/data/display.json`, optionally `website/assets/css/skyline.css`), thin workflows that call the engine's, and the city's docs. City facts
 never live here; adapters written for one site may (`docs/plan.md`).
 
 ## Status

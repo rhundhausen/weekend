@@ -27,6 +27,8 @@ TZ="$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('$CITY
 export TZ
 # The site's address, so the sitemap's links are absolute (pages still link each other by path).
 DOMAIN="$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('$CITY_JSON', 'utf8')).domain)")"
+# The site's name, as Hugo's title (site.toml has the rest of the config).
+export HUGO_TITLE="$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('$CITY_JSON', 'utf8')).siteName)")"
 export HUGO_CACHEDIR="${PWD}/.cache/hugo"
 
 if ! hugo version 2>/dev/null | grep -q "v${HUGO_VERSION}"; then
@@ -50,6 +52,6 @@ rm -rf worker
 cp -R "$ENGINE/website/worker" worker
 rm -rf worker/test worker/node_modules
 
-# The city's hugo.toml mounts ../data, ../ingestion/sources.json, and ../city.json, so the full
+# site.toml mounts the city's ../data, ../ingestion/sources.json, and ../city.json, so the full
 # city repo is needed; Cloudflare clones it and runs this from website/.
-hugo build --gc --minify --baseURL "https://${DOMAIN}/" --themesDir "$(dirname "$ENGINE")" --theme "$(basename "$ENGINE")"
+hugo build --gc --minify --config "$ENGINE/website/site.toml" --baseURL "https://${DOMAIN}/" --themesDir "$(dirname "$ENGINE")" --theme "$(basename "$ENGINE")"

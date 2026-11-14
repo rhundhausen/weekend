@@ -1,8 +1,8 @@
 # website
 
-The Hugo theme every city site is built with. A city repo holds only its own files: `website/hugo.toml` (title and data mounts), `website/wrangler.jsonc`, `website/static/` (icons and web manifest), `website/data/display.json`, and optionally `website/assets/css/skyline.css`. Any city file at the same path as one here replaces it. The theme config is `hugo.toml` at this repo's root, because Hugo lets a theme mount only folders inside it, and the vocabulary in `ingestion/vocabulary` is mounted as `data/vocabulary`.
+The Hugo theme every city site is built with. A city repo holds only its own files: `website/wrangler.jsonc`, `website/static/` (icons and web manifest), `website/data/display.json`, and optionally `website/assets/css/skyline.css`. Any city file at the same path as one here replaces it. The theme config is `hugo.toml` at this repo's root, because Hugo lets a theme mount only folders inside it, and the vocabulary in `ingestion/vocabulary` is mounted as `data/vocabulary`.
 
-The city's `hugo.toml` mounts its repo-level `data/` folder (events, archive, meta), `ingestion/sources.json` as `data/sources.json` (the `/sources/` page and header count), and `city.json` as `data/city.json` (site name, repo, time zone, coordinates, search aliases, and About page text). Each city site deploys with Cloudflare Workers Builds on every push to the city repo's `main`.
+`site.toml` here is every city's site config: build.sh passes it to Hugo with the title from `city.json`, and it mounts the city's repo-level `data/` folder (events, archive, meta), `ingestion/sources.json` as `data/sources.json` (the `/sources/` page and header count), and `city.json` as `data/city.json` (site name, repo, time zone, coordinates, search aliases, and About page text). Each city site deploys with Cloudflare Workers Builds on every push to the city repo's `main`.
 
 ## Build it
 
@@ -14,7 +14,7 @@ bash ../../weekend/website/build.sh           # builds to website/public/ (gitig
 
 Cloudflare runs the city's `wrangler.jsonc` build command, which clones this repo and runs the same script:
 `git clone --depth 1 https://github.com/rhundhausen/weekend ../.engine && bash ../.engine/website/build.sh`.
-The script reads the time zone from `city.json`, copies `worker/` into the city's `website/worker/` (wrangler's `main`; build output, not committed), and runs Hugo with this repo as the theme. To preview while editing, run Hugo the same way from the city's `website/` folder: `hugo server --themesDir ../.. --theme weekend`.
+The script reads the time zone from `city.json`, copies `worker/` into the city's `website/worker/` (wrangler's `main`; build output, not committed), and runs Hugo with this repo as the theme. To preview while editing, run Hugo the same way from the city's `website/` folder: `hugo server --config ../../weekend/website/site.toml --themesDir ../.. --theme weekend` (with `HUGO_TITLE` set to the site name for the right title).
 
 ## How it works
 

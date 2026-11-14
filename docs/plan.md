@@ -17,7 +17,6 @@ city.json                    city facts (below)
 ingestion/sources.json       the city's sources
 data/                        events, archive, links, meta (written by the workflows)
 data/schema/                 venue-aliases.json, place-cities.json, sizes.json
-website/hugo.toml            title, theme, and the data mounts
 website/wrangler.jsonc       Cloudflare Worker name, D1 binding, build command
 website/static/              favicons and web manifest
 website/assets/              the skyline SVG and any other branding
@@ -59,8 +58,8 @@ One file, read by the PowerShell scripts and mounted into Hugo as `data/city.jso
 5. **Tests** read a fixture city (`ingestion/tests/fixtures/city/`) with its own `city.json`,
    `sources.json` entries (Boulder's fixture approach), and lookup tables, so the engine's tests
    pass with no city repo present.
-6. **Website as a Hugo theme.** The engine's `website/` is the theme. The city's `hugo.toml` names
-   it and adds the data mounts (`../data`, `../ingestion/sources.json`, `../city.json`). City files
+6. **Website as a Hugo theme.** The engine's `website/` is the theme. The engine's
+   `website/site.toml` is every city's site config (title from `city.json`) and mounts the city's data (`../data`, `../ingestion/sources.json`, `../city.json`). City files
    at the same path override the theme's.
 7. **Build.** The engine's `website/build.sh` installs Hugo, sets `TZ` from `city.json`, and builds.
    A city's Cloudflare build command clones this repo (`--depth 1`, public, no token) next to the

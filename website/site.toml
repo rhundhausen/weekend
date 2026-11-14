@@ -1,0 +1,44 @@
+# Hugo site config for every city's site. A city repo has no hugo.toml: website/build.sh builds the
+# city's website/ folder with this file (--config), sets the title from city.json's siteName and the
+# base URL from its domain, and uses this repo as the theme (hugo.toml at the repo root).
+# Mount sources are relative to the city's website/ folder.
+
+locale = 'en-us'
+disableKinds = ['taxonomy', 'term', 'rss']
+# robots.txt (layouts/robots.txt) names the sitemap.
+enableRobotsTXT = true
+
+[module]
+  # The city's own files, at the same paths as the engine's, replace them: static/ holds the city's
+  # icons and web manifest, data/display.json its display names, and assets/css/skyline.css (when
+  # present) its skyline.
+  [[module.mounts]]
+    source = 'content'
+    target = 'content'
+  [[module.mounts]]
+    source = 'layouts'
+    target = 'layouts'
+  [[module.mounts]]
+    source = 'assets'
+    target = 'assets'
+  [[module.mounts]]
+    source = 'data'
+    target = 'data'
+  [[module.mounts]]
+    source = 'static'
+    target = 'static'
+  # Events come from the city repo's data/ folder, so ingestion never writes into website/.
+  [[module.mounts]]
+    source = '../data'
+    target = 'data'
+    # The raw file is ingest's input for refine, and city-lookup.json is refine's memory of the
+    # pages it read; the site reads neither.
+    files = ['! raw-events.json', '! city-lookup.json']
+  # The source list, for the sources page and the header count.
+  [[module.mounts]]
+    source = '../ingestion/sources.json'
+    target = 'data/sources.json'
+  # The city's facts: name, time zone, coordinates, About page text.
+  [[module.mounts]]
+    source = '../city.json'
+    target = 'data/city.json'
