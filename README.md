@@ -20,14 +20,19 @@ This repo holds only code every city shares:
 
 Each city has its own repo (such as weekendboise) holding everything specific to that city:
 `city.json`, `ingestion/sources.json`, `data/`, `website/wrangler.jsonc`, favicons and
-branding (`website/static/`, `website/data/display.json`, optionally `website/assets/css/skyline.css`), thin workflows that call the engine's, and the city's docs. City facts
-never live here; adapters written for one site may (`docs/plan.md`).
+branding (`website/static/`, `website/data/display.json`, optionally `website/assets/css/skyline.css`), thin workflows that call the engine's, and a README for site owners.
+City facts never live here; adapters written for one platform may (`CLAUDE.md`).
 
-## Status
+## Docs
 
-The code was copied from weekendboise (`docs/extraction.md` records that copy) and now reads every
-city fact from the city repo. `docs/plan.md` has the plan and the order of work. Cities track this
-repo's `main`: an engine push reaches a city at its next build or workflow run.
+- `docs/development.md`: how ingest, refine, the workflows, and the deploy work, and how to run
+  them locally.
+- `docs/github-setup.md`: setting up a new city.
+- `docs/sources.md`: the format of a city's `sources.json` and every adapter's fields.
+- `docs/schema.md` and `docs/cost-tiers.md`: the event fields and how they are worked out.
+- `website/README.md`: the theme, building the site, and the visitor log.
+
+Cities track this repo's `main`: an engine push reaches a city at its next build or workflow run.
 
 ## Tests
 

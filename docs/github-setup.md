@@ -1,57 +1,82 @@
-# GitHub setup
+# Setting up a city
 
-Manual steps in the GitHub UI after the move back from Azure DevOps on 2026-11-04. Do them in order.
+The steps to start a new city site on the engine. Do them in order. How the parts work once they
+run: [development.md](development.md).
 
 ## 1. The repository
 
-`rhundhausen/weekendboise` (named `WeekendBoise` until 2026-11-05) already exists. It was recreated on 2026-11-03 and holds 3 commits that only touch `README.md`; the pre-ADO history is not in it. The local clone at `C:\Projects\Data\Repos\GitHub\rhundhausen\WeekendBoise` tracks it, so commit the moved files on top of `main` and push normally. No force push is needed.
+Create a public repo for the city (such as `rhundhausen/weekend<city>`), with `main` as its default
+branch: the nightly schedule only runs on the default branch. Add the city's own files
+(development.md, "Engine and city repos"):
 
-If you would rather start from an empty history, delete and recreate the repo instead. Force-pushing over it works too, but it rewrites the 3 README commits.
+- `city.json`, checked by `ingestion/schema/city.schema.json`. `siteName`, `domain`, and `repo`
+  set the bot's User-Agent, the data commit identity, and the report sender.
+- `ingestion/sources.json` ([sources.md](sources.md)).
+- `data/schema/` with the city's `venue-aliases.json`, `place-cities.json`, and `sizes.json`.
+- `website/wrangler.jsonc`, `website/static/`, `website/data/display.json`, and optionally
+  `website/assets/css/skyline.css`.
+- `.github/workflows/ingest.yml`, `refine.yml`, and `test.yml`, each a short caller of this repo's
+  reusable workflow. Copy them from an existing city and change only the cron hours in
+  `ingest.yml` (the two UTC hours midnight falls on in the city's time zone).
+- `README.md` for site owners: who the bot is, how it behaves, and how to opt out. The User-Agent
+  links to it.
+- `.gitignore`, `.gitattributes`, and `LICENSE`, copied from an existing city. The `.gitignore`
+  keeps out the engine checkout (`.engine/`), `out/`, and the build output in `website/`.
 
-## 2. Default branch
+Validate locally with the engine checked out beside the repo:
+`../weekend/ingestion/scripts/Test-Sources.ps1`, then build the site
+([website/README.md](../website/README.md)).
 
-Settings > General > Default branch: `main`. The nightly schedule only runs on the default branch.
-
-## 3. Enable Actions
+## 2. Actions
 
 Settings > Actions > General:
 
-- Actions permissions: allow all actions, or at least actions created by GitHub (`actions/checkout`, `actions/upload-artifact`).
-- Workflow permissions: either setting works, because `ingest.yml` and `refine.yml` ask for `contents: write` themselves. Read and write is not required.
+- Actions permissions: allow all actions, or at least actions created by GitHub, and the
+  reusable workflows in `rhundhausen/weekend`.
+- Workflow permissions: either setting works, because the callers ask for `contents: write` and
+  `actions: read` themselves.
 
-If `main` gets a branch protection rule or ruleset later, allow `github-actions[bot]` to push to it, or the nightly data commit will be rejected.
+If `main` gets a branch protection rule or ruleset, allow `github-actions[bot]` to push to it, or
+the nightly data commits will be rejected.
 
-## 4. Repository secrets
+## 3. Secrets
 
-Settings > Secrets and variables > Actions > New repository secret. The names must match exactly:
+Settings > Secrets and variables > Actions > New repository secret. The names must match exactly;
+the table in development.md says what each is for. Create only the ones the city's sources use,
+plus `RESEND_API_KEY` and `REPORT_EMAIL` for the report emails (one address, or several separated
+by commas). A secret you don't create reaches the scripts as empty: that source fails with a
+warning while the rest run, and without the Resend secrets the email step warns and sends nothing.
 
-| Secret | Needed now |
-| --- | --- |
-| `TICKETMASTER_KEY` | Yes, 13 Ticketmaster sources are running |
-| `GOOGLE_CALENDAR_API_KEY` | Yes, for the Google Calendar sources. A Google Cloud API key with the Google Calendar API enabled, restricted to that API |
-| `BANDSINTOWN_APP_ID` | No, once an app id is approved |
-| `EVENTBRITE_TOKEN` | No, adapter is disabled |
-| `SEATGEEK_CLIENT_ID` | No, adapter is disabled |
-| `SONGKICK_API_KEY` | No, adapter is disabled |
-| `RESEND_API_KEY` | For the report emails. A Resend API key (resend.com > API Keys, "Sending access") |
-| `REPORT_EMAIL` | For the report emails. Where they go, and where replies go. One address, or several separated by commas |
+For the emails, verify the city's domain in Resend (resend.com > Domains) and create an API key
+scoped to it with sending access. The sender, `<siteName> Reports <reports@<domain>>`, comes from
+`city.json`, not a secret.
 
-The emails come from `WeekendBoise Reports <reports@weekendboise.com>` (weekendboise.com is verified in Resend; `RESEND_API_KEY` is a key scoped to that domain), and replies go to `REPORT_EMAIL`. The sender is set in `ingestion/scripts/lib/Report.ps1`, not in a secret.
+## 4. Cloudflare
 
-A secret you don't create reaches the scripts as empty, and that source fails with a warning while the rest run. Without `RESEND_API_KEY` or `REPORT_EMAIL`, the "Email the report" step warns and sends nothing.
+1. Workers & Pages > Create > Import a repository: the city repo, with `website` as the root
+   directory. The build command comes from `wrangler.jsonc`, which clones the engine and runs its
+   `build.sh`.
+2. For the visitor log, create the D1 database named in `city.json`'s `logDatabase`
+   (`npx wrangler d1 create <logDatabase>` or the dashboard) and put its id in `wrangler.jsonc`
+   (website/README.md, "Visitor log").
+3. Add the city's domain to the Worker (Settings > Domains & Routes).
 
-## 5. Prove the data commit with one source
+## 5. The first run
 
-Before the midnight (Boise time) schedule runs on its own:
-
-1. Actions > ingest > Run workflow, branch `main`, source `idaho-steelheads` (or any one running source). Leave the source blank the very first time, so the raw file starts with every source.
+1. Actions > ingest > Run workflow, branch `main`, with the source left blank, so the raw file
+   starts with every source.
 2. When it finishes, check:
-   - The run is green and the `out` artifact holds `idaho-steelheads.json` and `run.json`.
-   - `main` has a new commit by "WeekendBoise bot" titled `data: raw ingest YYYY-MM-DD [skip ci]` that changes only `data/raw-events.json`, and Cloudflare skipped it.
-3. Refine starts by itself when ingest finishes (Actions > refine; it can also be run by hand, branch `main`). When it finishes, check:
+   - The run is green and the `out` artifact holds the sources' files and `run.json`.
+   - `main` has a new commit by the city's bot titled `data: raw ingest YYYY-MM-DD [skip ci]` that
+     changes only `data/raw-events.json`, and Cloudflare skipped it.
+3. Refine starts by itself when ingest finishes. When it finishes, check:
    - The run is green and its log starts with the raw file's `asOf` and source count.
-   - `main` has a new commit titled `data: nightly refine YYYY-MM-DD` that changes only `data/events.json`, `data/archive/`, `data/links.json`, `data/city-lookup.json`, and `data/meta.json`, and its "Workers Builds: weekendboise" check deployed the site.
+   - `main` has a new commit titled `data: nightly refine YYYY-MM-DD` that changes only
+     `data/events.json`, `data/archive/`, `data/links.json`, `data/city-lookup.json`, and
+     `data/meta.json`, and Cloudflare deployed it.
    - The test workflow did not run for either commit.
-4. If a commit step fails with a permission error, recheck step 3.
+4. If a commit step fails with a permission error, recheck step 2.
 
-After that, leave ingest's schedule to run nightly at midnight Boise time; refine follows each ingest run. GitHub turns off scheduled workflows in a public repo after 60 days with no repository activity; the nightly data commits count as activity, so this only matters if ingest stops committing.
+After that, ingest runs nightly at midnight in the city's time zone and refine follows each run.
+GitHub turns off scheduled workflows in a public repo after 60 days with no repository activity;
+the nightly data commits count as activity, so this only matters if ingest stops committing.

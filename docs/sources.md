@@ -18,7 +18,7 @@ An idea needs only `displayName`. An entry with a `name` is a configured source 
 | `name` | `running` | Unique slug, also the per-source output file name. Setting it makes the entry a configured source |
 | `adapter` | configured, `ready` | `cityofboise`, `eventastic`, `googlecalendar`, `ics`, `rss`, `tribe`, `ticketmaster`, `eventbrite`, `eventbrite-search`, `seatgeek`, `songkick`, `bandsintown`, or `scrape`. `other` is allowed on ideas that need a new adapter, never on a configured entry |
 | `url` | configured, `feed-found`, `ready` | Feed or API endpoint, or the site for an idea |
-| `category` | configured | An id from `data/schema/categories.json`, used for this source's events. With `inferCategory`, it's the fallback |
+| `category` | configured | An id from the categories (`ingestion/vocabulary/categories.json`), used for this source's events. With `inferCategory`, it's the fallback |
 | `inferCategory` | no | `true` chooses each event's category from its tags. Use it for sources that mix many kinds of event. See [schema.md](schema.md#categories-and-tags) |
 | `city` | configured | Fallback city. Use `Other` for aggregators |
 | `venue` | configured | Fallback venue display name |
@@ -70,7 +70,7 @@ Dates without a year (Corbett, On The Water) are read as their next occurrence: 
 | --- | --- | --- |
 | `fixedVenue` | no | `true` uses the entry's venue for every event. Use it when a site lists rooms or buildings as venues, like Expo Idaho |
 | `excludeTitlePattern` | no | Regex. Matching titles are skipped, such as the Idaho Wine Commission's weekly happy hours |
-| `localTimeAsUtc` | no | `true` for a site set to UTC+0 (as Donnelly Library is), whose `utc_start_date` is really Boise wall-clock time. Reads `start_date` as local instead |
+| `localTimeAsUtc` | no | `true` for a site set to UTC+0 (as Donnelly Library is), whose `utc_start_date` is really local wall-clock time. Reads `start_date` as local instead |
 
 `url` is the REST events endpoint, ending in `/wp-json/tribe/events/v1/events`. The site's event categories feed tag matching.
 
@@ -101,7 +101,7 @@ For WordPress sites running the Eventastic plugin by Madden Media (Visit McCall;
 
 ### eventbrite-search
 
-`url` is an Eventbrite browse page, such as `https://www.eventbrite.com/d/id--emmett/events/`. No key is needed. Events come from the page's `window.__SERVER_DATA__` JSON (`buckets[].events[]`), with start and end in the event's own zone. Online events, cancelled events, and events with no address or an address outside Idaho are skipped. A "near Emmett" page covers the wider valley, so venue and city come from each event. The listing has no prices, so each kept event's page is read once a run for its schema.org offers, which set the cost tier; a lowest price of 0 there means free. Requests follow robots.txt and are at least 1 second apart. To add another town, add an entry with that town's browse page.
+`url` is an Eventbrite browse page, such as `https://www.eventbrite.com/d/id--emmett/events/`. No key is needed. Events come from the page's `window.__SERVER_DATA__` JSON (`buckets[].events[]`), with start and end in the event's own zone. Online events, cancelled events, and events with no address or an address outside the city's state are skipped. A "near Emmett" page covers the wider valley, so venue and city come from each event. The listing has no prices, so each kept event's page is read once a run for its schema.org offers, which set the cost tier; a lowest price of 0 there means free. Requests follow robots.txt and are at least 1 second apart. To add another town, add an entry with that town's browse page.
 
 ### seatgeek
 
@@ -109,7 +109,7 @@ For WordPress sites running the Eventastic plugin by Madden Media (Visit McCall;
 | --- | --- | --- |
 | `latlong`, `radius` | yes | Center as `lat,lon`, and radius in miles |
 
-`url` is `https://api.seatgeek.com/2/events`. Requires the `SEATGEEK_CLIENT_ID` environment variable. Only Idaho venues are kept. The lowest price sets the cost tier; the price itself is not stored. Disabled: built from the documented response and never run live.
+`url` is `https://api.seatgeek.com/2/events`. Requires the `SEATGEEK_CLIENT_ID` environment variable. Only venues in the city's state are kept. The lowest price sets the cost tier; the price itself is not stored. Disabled: built from the documented response and never run live.
 
 ### googlecalendar
 
@@ -122,7 +122,7 @@ For WordPress sites running the Eventastic plugin by Madden Media (Visit McCall;
 
 Reads a public Google Calendar through the Calendar API v3 (`events.list` on `www.googleapis.com`, which has no robots.txt). This is Google's supported way for programs to read a calendar; `calendar.google.com` itself disallows crawling, so its embed and iCal links are never read. `url` is the organization's own calendar page, for people. Requires the `GOOGLE_CALENDAR_API_KEY` environment variable.
 
-It asks for the next 90 days with `singleEvents=true` and `orderBy=startTime`, so Google expands repeating events and applies each instance's changes and exclusions; no RRULE is parsed here. Times are requested in `America/Denver` and stored with the Boise offset; all-day events keep their dates, with the API's exclusive end date made inclusive. Cancelled events, and titles starting with "Canceled" or "Cancelled" in any case, are skipped. Descriptions lose their HTML. A blank location uses the entry's `venue` and `city`. Each event links to its Google Calendar page (`htmlLink`), and an event id listed twice at the same start is kept once.
+It asks for the next 90 days with `singleEvents=true` and `orderBy=startTime`, so Google expands repeating events and applies each instance's changes and exclusions; no RRULE is parsed here. Times are requested in the city's time zone and stored with its offset; all-day events keep their dates, with the API's exclusive end date made inclusive. Cancelled events, and titles starting with "Canceled" or "Cancelled" in any case, are skipped. Descriptions lose their HTML. A blank location uses the entry's `venue` and `city`. Each event links to its Google Calendar page (`htmlLink`), and an event id listed twice at the same start is kept once.
 
 Without the key, or when the API answers 403 or 404 (the calendar is not public, or the id is wrong), only that source fails; the rest of the run goes on. Adding another calendar needs only a new entry.
 
@@ -140,7 +140,7 @@ Without the key, or when the API answers 403 or 404 (the calendar is not public,
 | --- | --- | --- |
 | `artistOrVenue` | yes | Name to look up. The API is keyed by artist |
 
-`url` is `https://rest.bandsintown.com`. Requires the `BANDSINTOWN_APP_ID` environment variable. Only Idaho dates are kept.
+`url` is `https://rest.bandsintown.com`. Requires the `BANDSINTOWN_APP_ID` environment variable. Only dates in the city's state are kept.
 
 No source uses this adapter yet, and it has never run against the live API. Its test fixture is written by hand from the documented response shape. See "Not yet working".
 
@@ -189,9 +189,9 @@ Reads an RSS 2.0 feed that uses the RSS event module (`ev:` namespace), which ca
 
 ### ics: fixedVenue
 
-`fixedVenue: true` on an `ics` entry uses the entry's venue for every event. The library LibCal feeds need it, because their `LOCATION` names rooms ("Children's Area"), not the building. `excludeTitlePattern` (regex) skips matching titles, such as library closures and board meetings. `localTimeAsUtc: true` is for Events Calendar sites set to UTC+0 (Tamarack Resort): their `?ical=1` feed labels Boise wall-clock time `TZID=UTC`, which would make every timed event 7 hours early.
+`fixedVenue: true` on an `ics` entry uses the entry's venue for every event. The library LibCal feeds need it, because their `LOCATION` names rooms ("Children's Area"), not the building. `excludeTitlePattern` (regex) skips matching titles, such as library closures and board meetings. `localTimeAsUtc: true` is for Events Calendar sites set to UTC+0 (Tamarack Resort): their `?ical=1` feed labels local wall-clock time `TZID=UTC`, which would make every timed event early by the city's UTC offset.
 
-Compare scraped times with what the site displays before enabling a source. Modern Events Calendar sites write local time as if it were UTC, which makes every event 7 hours early. Idaho History, Visit Boise, and Bluebird Social need `localTimeAsUtc`.
+Compare scraped times with what the site displays before enabling a source. Modern Events Calendar sites write local time as if it were UTC, which makes every event early by the city's UTC offset. Idaho History, Visit Boise, and Bluebird Social need `localTimeAsUtc`.
 
 The adapter's rules, enforced in code and covered by tests:
 

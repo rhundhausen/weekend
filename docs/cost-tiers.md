@@ -4,7 +4,7 @@ Two cost values are involved, and only one is stored:
 
 - `priceMin`: number or null. Cheapest adult ticket, face value, before fees.
   Source scripts work it out and pass it to `New-WkEvent`. It is never
-  stored: WeekendBoise keeps no ticket prices (see the README).
+  stored: the sites keep no ticket prices.
 - `costTier`: one of `free`, `$`, `$$`, `$$$`, or null (unknown). Stored on
   the event; left out when null.
 
@@ -43,7 +43,7 @@ description names none, is unknown.
 - "Tickets at the door" or "see website" with no amount: null.
 - Sold out: keep the original price; cost is independent of availability.
 - A price of 0 in a page's schema.org offers is a placeholder, not free:
-  sites put it in by default (Bluebird lists a $39 show at 0). It counts as
+  sites put it in by default (one venue listed a $39 show at 0). It counts as
   free only when the page also marks the event free (`isAccessibleForFree`),
   or on Eventbrite, whose offers are reliable.
 

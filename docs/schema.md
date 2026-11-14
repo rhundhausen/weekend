@@ -6,14 +6,14 @@
 | --- | --- | --- | --- |
 | `id` | string | yes | Stable hash, see below |
 | `title` | string | yes | Plain text |
-| `start` | string | yes | ISO 8601 with the Boise offset, or `YYYY-MM-DD` when `allDay` is true |
+| `start` | string | yes | ISO 8601 with the city's UTC offset, or `YYYY-MM-DD` when `allDay` is true |
 | `end` | string | no | Same format as `start`. Omitted when unknown. An all-day `end` is the last day, inclusive |
 | `allDay` | boolean | no | Defaults to false |
 | `venue` | string | yes | Display name |
 | `venueKey` | string | yes | Lowercase slug, for example `extramile-arena` |
-| `city` | string | no | `Boise`, `Meridian`, `Nampa`, `Caldwell`, `Eagle`, `Garden City`, `Kuna`, `Star`, `Emmett`, `Marsing`, `Middleton`, `Mountain Home`, `Payette`, `Weiser`, `Valley County`, or `Other` |
-| `category` | string | yes | One id from `data/schema/categories.json` |
-| `tags` | array | no | Zero or more ids from `data/schema/tags.json` |
+| `city` | string | no | One of the city's `cities` (`city.json`), or `Other` |
+| `category` | string | yes | One category id (`ingestion/vocabulary/categories.json`) |
+| `tags` | array | no | Zero or more tag ids (`ingestion/vocabulary/tags.json`) |
 | `size` | string | no | Estimated crowd: `S`, `M`, `L`, or `XL`. A guess, see below |
 | `costTier` | string | no | `free`, `$`, `$$`, or `$$$`, from the cheapest adult ticket. Left out when the price is unknown. See below |
 | `url` | string | yes | Canonical event page, from the source with the best `priority` |
@@ -51,9 +51,9 @@ When duplicates merge, the best source keeps its own `costTier`, and a duplicate
 
 Every event has one primary category and any number of tags. Tags cross categories: a free family Christmas concert is `holiday-seasonal`, tagged `concert`, `free-admission`, and `family-friendly`.
 
-`data/schema/categories.json` holds the 12 categories. Their ids are also enums in both schemas, and a test keeps all three in step.
+The engine's vocabulary in `ingestion/vocabulary/` holds the categories and tags every city shares, and a city adds to them in its own `data/schema/` files of the same names. `categories.json` holds the 12 categories. Their ids are also enums in both schemas, and a test keeps all three in step.
 
-`data/schema/tags.json` holds the tags:
+`tags.json` holds the tags:
 
 | Field | Required | Notes |
 | --- | --- | --- |
@@ -74,13 +74,13 @@ Matching is by keyword, so some events are misfiled. An event whose title is onl
 
 ## Titles
 
-A title or venue in all capitals ("OLD BOISE MODEL RAILROAD") or all lowercase ("idaho art gallery") is changed to title case ("Old Boise Model Railroad", "Idaho Art Gallery"). Acronyms stay capitalized: words with no vowels (DJ, CSL), Roman numerals, and the words listed in `data/schema/title-case.json`, which also gives exact spellings (McCall) and the small words kept lowercase (of, the, in). All-lowercase text skips that list, since "us", "id", and "steam" are ordinary words in lowercase. A title with both cases, or of one word (often a band's own styling, such as KREAM), is left alone. The `id` is computed from the lowercased title, so it does not change. The code is `ConvertTo-WkTitleCase` in `ingestion/scripts/lib/Schema.ps1`.
+A title or venue in all capitals ("OLD BOISE MODEL RAILROAD") or all lowercase ("idaho art gallery") is changed to title case ("Old Boise Model Railroad", "Idaho Art Gallery"). Acronyms stay capitalized: words with no vowels (DJ, CSL), Roman numerals, and the words listed in `title-case.json` (the engine's vocabulary plus the city's additions), which also gives exact spellings (McCall) and the small words kept lowercase (of, the, in). All-lowercase text skips that list, since "us", "id", and "steam" are ordinary words in lowercase. A title with both cases, or of one word (often a band's own styling, such as KREAM), is left alone. The `id` is computed from the lowercased title, so it does not change. The code is `ConvertTo-WkTitleCase` in `ingestion/scripts/lib/Schema.ps1`.
 
 ## Venues
 
 Sources spell a venue in different ways: Ticketmaster has `Neurolux Lounge` and `Knitting Factory - Boise`, and aggregators have `Extra Mile Arena`. Those would count as separate venues and block merging, so `data/schema/venue-aliases.json` maps each spelling to one `venueKey` and name. It applies to every source, before the `id` is computed. To fix a split venue, add a line there. No code changes are needed.
 
-Some sources, mostly Boise Mom, give no city, so their events fall back to `Other`. After merging, refine looks for the city in the event's own venue, title, and description, from strongest clue to weakest: an Idaho ZIP code, "City, ID", "(City)" in the title, a city in the venue name, a known place, a venue other sources place in one city, "in" or "downtown" before a city, then a city named in the title or description. A clue that names two cities is ambiguous and leaves `Other`. Star, Payette, Emmett, Middleton, and Weiser are also everyday words or surnames, so they count only from a ZIP code or "City, ID". Known places (the Basque Block, Warhawk Air Museum) and names to ignore (Boise Cascade, Boise Hawks) are in `data/schema/place-cities.json`; add a line there to teach it a place. Only the city changes, so the `id` stays the same. The code is `Resolve-WkOtherCity` in `ingestion/scripts/lib/Cities.ps1`, and every refine run applies it to stored data, including the archive.
+Some sources, mostly aggregators, give no city, so their events fall back to `Other`. After merging, refine looks for the city in the event's own venue, title, and description, from strongest clue to weakest: a ZIP code in the city's area, "City, ST" with the city's state, "(City)" in the title, a city in the venue name, a known place, a venue other sources place in one city, "in" or "downtown" before a city, then a city named in the title or description. A clue that names two cities is ambiguous and leaves `Other`. Cities whose names are also everyday words or surnames (Star or Weiser in Boise's area) are listed in `city.json`'s `ambiguousCities` and count only from a ZIP code or "City, ST". Known places and names to ignore (in Boise, the Basque Block and Boise Cascade) are in the city's `data/schema/place-cities.json`; add a line there to teach it a place. Only the city changes, so the `id` stays the same. The code is `Resolve-WkOtherCity` in `ingestion/scripts/lib/Cities.ps1`, and every refine run applies it to stored data, including the archive.
 
 ## Size
 
