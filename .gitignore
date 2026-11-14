@@ -1,0 +1,14 @@
+# Based on weekendboise's .gitignore.
+out/
+testResults.xml
+website/public/
+website/resources/
+website/.wrangler/
+.hugo_build.lock
+.env.ps1
+.secrets.local.md
+.superpowers/
+
+# City files belong in the city repos, never in the engine.
+/data/
+/ingestion/sources.json
