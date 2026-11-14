@@ -101,5 +101,4 @@ city pages, no Crawl-delay applies, and the pages served real listings with no b
 - The list of city pages lives in Boise's `sources.json`. Sale pages are never fetched.
 - The same sale often appears on both sites under different titles, so duplicate merging is
   tested against these pages.
-- EstateSales.org's entry is updated to "permission given, per the site owner, recorded
-  2026-11-13".
+- EstateSales.org's entry is updated to "permission given 2026-11-09, per the site owner".
