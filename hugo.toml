@@ -1,0 +1,25 @@
+# Hugo theme config: the engine repo is the theme for every city's site. A city's website/hugo.toml
+# sets the title and mounts the city's data, and website/build.sh builds the city's site with this
+# repo as its theme (--themesDir <this repo's parent> --theme <this repo's folder>). A city file at
+# the same path as one here (a layout, assets/css/skyline.css, a static icon) replaces it.
+# The ingestion scripts do not read this file.
+[module]
+  [[module.mounts]]
+    source = 'website/content'
+    target = 'content'
+  [[module.mounts]]
+    source = 'website/layouts'
+    target = 'layouts'
+  [[module.mounts]]
+    source = 'website/assets'
+    target = 'assets'
+  [[module.mounts]]
+    source = 'website/data'
+    target = 'data'
+  [[module.mounts]]
+    source = 'website/static'
+    target = 'static'
+  # Categories, tags, and title case. The city's additions are in its data/schema/.
+  [[module.mounts]]
+    source = 'ingestion/vocabulary'
+    target = 'data/vocabulary'

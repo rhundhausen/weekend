@@ -3,9 +3,10 @@
 .SYNOPSIS
   Shows the visitor log: who opened the site, from where, on what, and what they searched for.
 .DESCRIPTION
-  Reads the private weekendboise-log D1 database with wrangler, signed in as you. Nothing about
-  the log is public: the site only writes to it, and reading it needs your Cloudflare login
-  (run "npx wrangler login" once). Run from the repo root or anywhere; times are shown in Boise.
+  Reads the city's private visitor log D1 database (logDatabase in city.json, such as
+  weekendboise-log) with wrangler, signed in as you. Nothing about the log is public: the site only
+  writes to it, and reading it needs your Cloudflare login (run "npx wrangler login" once). Run
+  from anywhere in the city repo; times are shown in the city's time zone.
 .PARAMETER Days
   How far back to look. Rows are kept 90 days.
 .PARAMETER Last
@@ -19,10 +20,13 @@
   that matched nothing.
 .PARAMETER IncludeBots
   Keep rows from crawlers, which are left out by default.
+.PARAMETER CityRoot
+  The city repo. Defaults to $env:WEEKEND_CITY_ROOT, else the nearest folder at or above the
+  current directory with a city.json.
 .EXAMPLE
-  ./website/scripts/Get-VisitorLog.ps1 -Days 1
+  ../weekend/website/scripts/Get-VisitorLog.ps1 -Days 1
 .EXAMPLE
-  ./website/scripts/Get-VisitorLog.ps1 -Summary -Days 30
+  ../weekend/website/scripts/Get-VisitorLog.ps1 -Summary -Days 30
 #>
 [CmdletBinding()]
 param(
@@ -31,16 +35,21 @@ param(
   [string]$Ip,
   [string]$Search,
   [switch]$Summary,
-  [switch]$IncludeBots
+  [switch]$IncludeBots,
+  [string]$CityRoot
 )
 
 $ErrorActionPreference = 'Stop'
-$website = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot '..' '..' 'ingestion' 'scripts' 'lib' 'City.ps1')
+$null = Set-WkCityRoot $CityRoot
+$city = Get-WkCity
+# wrangler reads the city's website/wrangler.jsonc, which binds the database.
+$website = Get-WkCityPath 'website'
 
 function Invoke-LogQuery([string]$Sql) {
   Push-Location $website
   try {
-    $out = & npx --yes wrangler d1 execute weekendboise-log --remote --json --command $Sql 2>&1
+    $out = & npx --yes wrangler d1 execute $city.logDatabase --remote --json --command $Sql 2>&1
     if ($LASTEXITCODE) { throw "wrangler failed: $($out -join "`n")" }
   } finally {
     Pop-Location
@@ -73,11 +82,11 @@ if ($Summary) {
   return
 }
 
-$boise = [TimeZoneInfo]::FindSystemTimeZoneById('America/Boise')
+$local = [TimeZoneInfo]::FindSystemTimeZoneById($city.timeZone)
 Invoke-LogQuery "SELECT ts, kind, ip, city, region, device, browser, os, q, qs, results, referrer FROM visits WHERE $filter ORDER BY ts DESC LIMIT $Last" |
   ForEach-Object {
     [pscustomobject]@{
-      When     = [TimeZoneInfo]::ConvertTime([DateTimeOffset]::Parse($_.ts), $boise).ToString('MMM d h:mm tt')
+      When     = [TimeZoneInfo]::ConvertTime([DateTimeOffset]::Parse($_.ts), $local).ToString('MMM d h:mm tt')
       Kind     = $_.kind
       IP       = $_.ip
       Where    = (@($_.city, $_.region) | Where-Object { $_ }) -join ', '

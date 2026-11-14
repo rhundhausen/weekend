@@ -1,17 +1,20 @@
 # website
 
-Hugo site, deployed by Cloudflare Workers Builds on every push to `main` (see "Deploying" in `docs/development.md`). A single page lists upcoming events in a grid with search and filters, including a rough cost tier and a 3-line card on phones.
+The Hugo theme every city site is built with. A city repo holds only its own files: `website/hugo.toml` (title and data mounts), `website/wrangler.jsonc`, `website/static/` (icons and web manifest), `website/data/display.json`, and optionally `website/assets/css/skyline.css`. Any city file at the same path as one here replaces it. The theme config is `hugo.toml` at this repo's root, because Hugo lets a theme mount only folders inside it, and the vocabulary in `ingestion/vocabulary` is mounted as `data/vocabulary`.
 
-Reads events from the repo-level `data/` folder via a `module.mounts` entry (source `../data`, target `data`), so ingestion never writes into this tree. `ingestion/sources.json` is mounted the same way as `data/sources.json`, for the `/sources/` page (every running source, with its upcoming event count linking to the grid filtered by `?source=<name>`) and the header count. The `/bot` page for site owners who see the `WeekendBoise` user agent will live at `content/bot.md`.
+The city's `hugo.toml` mounts its repo-level `data/` folder (events, archive, meta), `ingestion/sources.json` as `data/sources.json` (the `/sources/` page and header count), and `city.json` as `data/city.json` (site name, repo, time zone, coordinates, search aliases, and About page text). Each city site deploys with Cloudflare Workers Builds on every push to the city repo's `main`.
 
-## Run it
+## Build it
 
-From the repo root (Hugo extended 0.156 or later):
+From a city repo's `website/` folder, with this repo checked out next to the city repo (Hugo extended 0.162.1, or the script installs it):
 
-```powershell
-hugo server -s website          # http://localhost:1313, rebuilds on change
-hugo -s website --minify        # builds to website/public/ (gitignored)
+```bash
+bash ../../weekend/website/build.sh           # builds to website/public/ (gitignored)
 ```
+
+Cloudflare runs the city's `wrangler.jsonc` build command, which clones this repo and runs the same script:
+`git clone --depth 1 https://github.com/rhundhausen/weekend ../.engine && bash ../.engine/website/build.sh`.
+The script reads the time zone from `city.json`, copies `worker/` into the city's `website/worker/` (wrangler's `main`; build output, not committed), and runs Hugo with this repo as the theme. To preview while editing, run Hugo the same way from the city's `website/` folder: `hugo server --themesDir ../.. --theme weekend`.
 
 ## How it works
 
@@ -25,9 +28,9 @@ hugo -s website --minify        # builds to website/public/ (gitignored)
 A private log of who uses the site and what they search for. Only the Cloudflare account can read it; nothing serves it over the web.
 
 - **What is logged:** `app.js` posts to `/api/log` when the page opens (a `view`) and each time the filters settle for 2 seconds (a `search`): the query string, the search words, how many events matched, the window width, and on views the referring page. The Worker (`worker/index.js`, which `wrangler.jsonc` runs only for `/api/*`) adds the time, the IP address, Cloudflare's location and network for that address, and the device (phone, tablet, or desktop), browser, and OS from the User-Agent, then stores one row in the `visits` table. Columns are described in `worker/schema.js`.
-- **Where:** the D1 database `weekendboise-log`, bound as `LOG_DB`. The table is created on the first log request. A daily cron (10:00 UTC) deletes rows older than 90 days.
-- **Viewing:** `./website/scripts/Get-VisitorLog.ps1` (newest 100 rows from the last 7 days; `-Days`, `-Last`, `-Ip`, `-Search`, `-IncludeBots`) or `-Summary` (visits by device, browser, and city, top searches, and searches that found nothing). It runs `wrangler d1 execute` as you, so run `npx wrangler login` once first. The Cloudflare dashboard's D1 console (Storage and databases > D1 > weekendboise-log) runs any SQL, for example `SELECT * FROM visits ORDER BY ts DESC LIMIT 50`.
+- **Where:** the city's D1 database (`logDatabase` in `city.json`, such as `weekendboise-log`), bound as `LOG_DB`. The table is created on the first log request. A daily cron (10:00 UTC) deletes rows older than 90 days.
+- **Viewing:** `../weekend/website/scripts/Get-VisitorLog.ps1`, run from the city repo (newest 100 rows from the last 7 days; `-Days`, `-Last`, `-Ip`, `-Search`, `-IncludeBots`) or `-Summary` (visits by device, browser, and city, top searches, and searches that found nothing). It runs `wrangler d1 execute` as you, so run `npx wrangler login` once first. The Cloudflare dashboard's D1 console (Storage and databases > D1 > weekendboise-log) runs any SQL, for example `SELECT * FROM visits ORDER BY ts DESC LIMIT 50`.
 - **Tests:** `node --test` in `website/worker` (also run by the test workflow).
-- **Setting it up:** create the database once with `npx wrangler d1 create weekendboise-log` (or in the dashboard), then add its binding to `wrangler.jsonc`:
-  `"d1_databases": [{ "binding": "LOG_DB", "database_name": "weekendboise-log", "database_id": "<id>" }]`.
+- **Setting it up:** create the database once with `npx wrangler d1 create <logDatabase>` (or in the dashboard), then add its binding to `wrangler.jsonc`:
+  `"d1_databases": [{ "binding": "LOG_DB", "database_name": "<logDatabase>", "database_id": "<id>" }]`.
   Until the binding exists, `/api/log` answers 204 and stores nothing.

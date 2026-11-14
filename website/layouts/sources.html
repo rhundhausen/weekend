@@ -33,7 +33,7 @@
 </header>
 
 <main class="wrap">
-  <p class="sources-intro">{{ len $running }} public calendars, feeds, and APIs, read every night at midnight Boise time. Every listing links back to its source.</p>
+  <p class="sources-intro">{{ len $running }} public calendars, feeds, and APIs, read every night at midnight {{ hugo.Data.city.cityName }} time. Every listing links back to its source.</p>
   {{- /* Sources with no upcoming events are hidden until this is checked; ?show=all checks it. */}}
   <label class="chip toggle sources-toggle"><input type="checkbox" id="show-empty">{{ $empty := 0 }}{{ range $running }}{{ if not (index $counts .name) }}{{ $empty = add $empty 1 }}{{ end }}{{ end }}<span>Show {{ $empty | lang.FormatNumber 0 }} sources with no current events</span></label>
   <div class="table-wrap sources-table hide-empty" id="sources-table">
@@ -141,7 +141,7 @@
 
 <footer class="wrap foot">
   {{- /* New-issue links with the title and prompts filled in. Opening one needs a GitHub account. */}}
-  {{- $newIssue := "https://github.com/rhundhausen/weekendboise/issues/new?" }}
+  {{- $newIssue := print "https://github.com/" hugo.Data.city.repo "/issues/new?" }}
   {{- $listMe := querify "title" "Add a source: " "body" "Venue or organization:\n\nLink to your public events page:\n\nCity:\n" }}
   {{- $leaveOut := querify "title" "Remove a source: " "body" "Site to remove:\n\nAnything else we should know:\n" }}
   <p>Don't see your venue or calendar? <a href="{{ print $newIssue $listMe }}" rel="noopener" target="_blank">Create an issue</a> to get listed. Run one of these sites and want it left out? <a href="{{ print $newIssue $leaveOut }}" rel="noopener" target="_blank">Create an issue</a> to opt out.</p>

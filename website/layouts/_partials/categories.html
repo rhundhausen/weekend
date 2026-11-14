@@ -1,0 +1,12 @@
+{{- /* The categories: the engine's ingestion/vocabulary/categories.json (mounted as data/vocabulary),
+     with a category's includes replaced where the city's data/schema/categories.json lists it, as
+     the ingestion scripts do (Get-WkVocabulary in lib/City.ps1). Returns the list in file order. */}}
+{{- $local := dict }}
+{{- range hugo.Data.schema.categories }}{{ $local = merge $local (dict .id .includes) }}{{ end }}
+{{- $out := slice }}
+{{- range hugo.Data.vocabulary.categories }}
+  {{- $c := . }}
+  {{- with index $local .id }}{{ $c = merge $c (dict "includes" .) }}{{ end }}
+  {{- $out = $out | append $c }}
+{{- end }}
+{{- return $out }}

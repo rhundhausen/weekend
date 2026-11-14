@@ -1,14 +1,15 @@
 // Event grid: loads the slim events file, then filters, searches, sorts, and pages in the browser.
 // All event text comes from outside sources, so it is only ever set with textContent.
 
-const cfg = JSON.parse(document.getElementById('tv-config').textContent);
+// Built by layouts/home.html; the city facts in it (tz, aliases, state) come from the city's city.json.
+const cfg = JSON.parse(document.getElementById('wk-config').textContent);
 const PAGE_SIZES = [25, 50, 100, 250, 500];
 const DEFAULT_PER = PAGE_SIZES[0];
-const TZ = 'America/Boise';
+const TZ = cfg.tz;
 
 const ymdFmt = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
 const timeFmt = new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' });
-// "17:30" in Boise time, for comparing times as strings.
+// "17:30" in the city's time, for comparing times as strings.
 const hmFmt = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 const dayFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric' });
 const shortFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' });
@@ -27,17 +28,18 @@ const el = {
 // Start with the cursor in the search box. Skipped on touch screens, where focusing would pop up the keyboard.
 if (matchMedia('(pointer: fine)').matches) el.q.focus({ preventScroll: true });
 
-// Dates are handled as YYYY-MM-DD strings in Boise time; noon UTC keeps day math clear of DST edges.
-const boiseDay = (date) => ymdFmt.format(date);
+// Dates are handled as YYYY-MM-DD strings in the city's time; noon UTC keeps day math clear of DST edges.
+const localDay = (date) => ymdFmt.format(date);
 const asDate = (ymd) => new Date(`${ymd}T12:00:00Z`);
 const addDays = (ymd, n) => { const d = asDate(ymd); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 // Lowercase, no accents, no apostrophes: "Women's" and "womens" both become "womens".
 const fold = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/['‘’]/g, '').toLowerCase();
 // Short forms people search with. A search word matches if the event has it or any of its long forms.
-const ALIASES = { bsu: ['boise state'], nnu: ['northwest nazarene'], cofi: ['college of idaho'], meetups: ['meetup'] };
+// The city's own (such as bsu for boise state) come from searchAliases in city.json.
+const ALIASES = { meetups: ['meetup'], ...(cfg.aliases || {}) };
 const searchTerms = (q) => fold(q).split(/\s+/).filter(Boolean).map((w) => [w, ...(ALIASES[w] || [])]);
-const today = () => boiseDay(new Date());
-// "Tonight" is events that start today at 5 PM or later and end by 2 AM (last call in Idaho).
+const today = () => localDay(new Date());
+// "Tonight" is events that start today at 5 PM or later and end by 2 AM (last call in most states).
 // "Tomorrow night" is the same window a day later. An event with no end time counts if it
 // starts in that window.
 const NIGHTS = new Set(['tonight', 'tomorrow-night']);
@@ -58,7 +60,10 @@ const isMeetup = (u) => /^https?:\/\/([^/?#]+\.)?meetup\.com([/?#:]|$)/i.test(u 
 // calendar (its source id says so, such as boise-public-library). layouts/home.html uses the same rule.
 const LIBRARY = /librar/i;
 const isLibrary = (venue, sources) => LIBRARY.test(venue || '') || sources.some((n) => LIBRARY.test(n));
-const dropAddress = (v) => (/^\D[^,]*,.*(\b\d{5}\b|,\s*(ID|Idaho)\b)/.test(v) ? v.split(',')[0] : v);
+// The state's code and name (["ID", "Idaho"]) come from city.json.
+const STATE = (cfg.state || []).map(escapeRe).join('|') || '(?!)';
+const ADDRESS = new RegExp(String.raw`^\D[^,]*,.*(\b\d{5}\b|,\s*(${STATE})\b)`);
+const dropAddress = (v) => (ADDRESS.test(v) ? v.split(',')[0] : v);
 
 // Cost filter values (kept in the URL as ?cost=) to tiers. An unknown cost matches only "Any cost".
 // The ranges are in the Cost header's tooltip, not on each cell (docs/cost-tiers.md).
@@ -71,8 +76,8 @@ let events = [];
 
 function prepare(e) {
   const allDay = Boolean(e.a) || e.s.length === 10;
-  const sd = allDay ? e.s.slice(0, 10) : boiseDay(new Date(e.s));
-  let ed = e.e ? (allDay ? e.e.slice(0, 10) : boiseDay(new Date(e.e))) : sd;
+  const sd = allDay ? e.s.slice(0, 10) : localDay(new Date(e.s));
+  let ed = e.e ? (allDay ? e.e.slice(0, 10) : localDay(new Date(e.e))) : sd;
   if (ed < sd) ed = sd;
   const catLabel = cfg.categories[e.k] || e.k;
   const meetup = isMeetup(e.u);
@@ -96,11 +101,11 @@ function prepare(e) {
     title: e.t, venue: e.v, shortTitle: shorten(e.t), shortVenue: shorten(dropAddress(e.v || '')), city: e.c, cat: e.k, catLabel, tags: e.g || [], size: e.z, cost: e.p || '', broken: Boolean(e.x), url: e.u, desc: e.d, src: e.r || [], meetup, library,
     sd, ed, allDay,
     instant, end,
-    // Boise "YYYY-MM-DD HH:MM" of the start and the real end (blank without one), for Tonight
+    // Local "YYYY-MM-DD HH:MM" of the start and the real end (blank without one), for Tonight
     // and Tomorrow night.
     // An end exactly at the start counts as no end.
     startKey: allDay ? '' : `${sd} ${hmFmt.format(new Date(instant))}`,
-    endKey: endParsed > instant ? `${boiseDay(new Date(endParsed))} ${hmFmt.format(new Date(endParsed))}` : '',
+    endKey: endParsed > instant ? `${localDay(new Date(endParsed))} ${hmFmt.format(new Date(endParsed))}` : '',
     dateText, timeText,
     hay: fold(searchable.join(' ')),
   };
@@ -619,7 +624,7 @@ document.addEventListener('keydown', (ev) => {
   }
 });
 
-// The build writes the ingest time in UTC; show it in Boise time.
+// The build writes the ingest time in UTC; show it in the city's time.
 const asOf = document.getElementById('as-of');
 if (asOf && cfg.lastIngest) {
   const when = new Date(cfg.lastIngest);

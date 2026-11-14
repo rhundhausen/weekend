@@ -4,7 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ if .IsHome }}{{ site.Title }}{{ else }}{{ .Title }} | {{ site.Title }}{{ end }}</title>
-  <meta name="description" content="{{ .Description | default "Upcoming events in Boise, Meridian, Nampa, and the rest of the Treasure Valley." }}">
+  {{- /* City facts come from the city repo's city.json, mounted as data/city.json. */}}
+  {{- $city := hugo.Data.city }}
+  {{- /* A page's description may say {site} for the site's name. */}}
+  <meta name="description" content="{{ replace (.Description | default $city.description) "{site}" site.Title }}">
   <meta name="color-scheme" content="light dark">
   {{- /* The day icons until the script below picks the look; without JavaScript they stay. */}}
   <link id="icon-ico" rel="icon" href="{{ relURL "icons/day/favicon.ico" }}" sizes="any">
@@ -12,11 +15,11 @@
   <link id="icon-apple" rel="apple-touch-icon" href="{{ relURL "icons/day/apple-touch-icon.png" }}">
   <link rel="manifest" href="{{ relURL "site.webmanifest" }}">
   {{- /* Day, sunset, or night look and icons, set before the first paint so the page never
-       flashes. The periods follow Boise's sky, worked out each day from its sunrise and sunset
+       flashes. The periods follow the city's sky (city.json coordinates), worked out each day from its sunrise and sunset
        (NOAA's sunrise equation), so they move with the seasons: sunset runs from an hour before
        sunset to half an hour after it (about the end of civil twilight), night until half an hour
        before sunrise, and day the rest. In November that is sunset about 4:20 to 5:50 PM; in late
-       June, about 8:30 to 10 PM. Times are instants, so a visitor in another zone sees Boise's sky.
+       June, about 8:30 to 10 PM (in Boise). Times are instants, so a visitor in another zone sees the city's sky.
        Checked again every 10 minutes for open tabs. The CSS colors and the header logo follow
        data-period; this script points the favicon links at the matching icons.
        TESTING ONLY, remove before launch: ?period=day, ?period=sunset, or ?period=night forces one. */}}
@@ -24,8 +27,8 @@
     (function () {
       var base = {{ relURL "icons/" }};
       var forced = (location.search.match(/[?&]period=(day|sunset|night)\b/) || [])[1];
-      var LAT = 43.615, LON = -116.202, MIN = 60000, rad = Math.PI / 180;
-      // Sunrise and sunset (ms since 1970) on the solar day nearest now, at Boise.
+      var LAT = {{ $city.coordinates.lat }}, LON = {{ $city.coordinates.lon }}, MIN = 60000, rad = Math.PI / 180;
+      // Sunrise and sunset (ms since 1970) on the solar day nearest now, at the city.
       function sun(now) {
         var jd = now / 86400000 + 2440587.5;
         var n = Math.round(jd - 2451545.0009 + LON / 360);
@@ -63,7 +66,9 @@
     {{- $logo = merge $logo (dict . (printf "url(\"data:image/svg+xml;base64,%s\")" (readFile (printf "static/icons/%s/favicon.svg" .) | base64Encode))) }}
   {{- end }}
   <style>{{ printf ":root{--logo:%s}:root[data-period=\"sunset\"]{--logo:%s}:root[data-period=\"night\"]{--logo:%s}" $logo.day $logo.sunset $logo.night | safeCSS }}</style>
-  {{ $css := resources.Get "css/site.css" | minify | fingerprint }}
+  {{- /* The skyline is city branding: css/skyline.css here is a default, and a city's own
+       assets/css/skyline.css replaces it. */}}
+  {{ $css := slice (resources.Get "css/site.css") (resources.Get "css/skyline.css") | resources.Concat "css/site.css" | minify | fingerprint }}
   <link rel="stylesheet" href="{{ $css.RelPermalink }}" integrity="{{ $css.Data.Integrity }}">
 </head>
 <body>

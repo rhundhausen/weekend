@@ -5,7 +5,9 @@
 {{- $sizes := hugo.Data.schema.sizes }}
 {{- $low := 15 }}{{ $high := 40 }}
 {{- with (hugo.Data.meta).costTierBreakpoints }}{{ $low = .low }}{{ $high = .high }}{{ end }}
-{{- $newIssue := "https://github.com/rhundhausen/weekendboise/issues/new?" }}
+{{- /* City facts come from the city repo's city.json, mounted as data/city.json. */}}
+{{- $city := hugo.Data.city }}
+{{- $newIssue := print "https://github.com/" $city.repo "/issues/new?" }}
 {{- $suggest := querify "title" "Suggestion: " "body" "Your idea, a missing event or source, or a wrong listing:\n" }}
 
 <header class="top">
@@ -21,13 +23,13 @@
 
 <main class="wrap">
 <div class="prose">
-  <h2>What is WeekendBoise?</h2>
-  <p>WeekendBoise lists upcoming events in Boise, Meridian, Nampa, Caldwell, Eagle, Garden City, Kuna, Star, Emmett, and the towns around them, out to Mountain Home, Payette, Weiser, and even Valley County. Concerts, theater, games, markets, festivals, library programs, classes, races, auctions and estate sales: if a public calendar lists it, it shows up here.</p>
-  <p>Every night at midnight Boise time, the site reads {{ $roundedSources }} public calendars, feeds, and APIs (<a href="{{ relURL "sources/" }}">see the sources</a>), merges events that more than one source lists, and drops events that are over. Every listing links to the organizer's own page, which has the full details and the final word on times, tickets, and changes.</p>
+  <h2>What is {{ $city.siteName }}?</h2>
+  <p>{{ $city.about.intro | safeHTML }}</p>
+  <p>Every night at midnight {{ $city.cityName }} time, the site reads {{ $roundedSources }} public calendars, feeds, and APIs (<a href="{{ relURL "sources/" }}">see the sources</a>), merges events that more than one source lists, and drops events that are over. Every listing links to the organizer's own page, which has the full details and the final word on times, tickets, and changes.</p>
   <p>The site stores only what the list needs: title, times, venue, city, category, and a short description. It keeps no ticket prices, photos, or contact details, and it never works around a site that asks not to be read.</p>
 
   <h2>How it started</h2>
-  <p>WeekendBoise began as a personal project by Richard Hundhausen, with a simple goal: to know what was happening around Boise without hunting through dozens of separate websites. One calendar led to another, then a few dozen more, and a small side project grew into what you see today: hundreds of sources and thousands of events, refreshed every night.</p>
+  <p>{{ $city.about.story | safeHTML }}</p>
 
   <h2 id="legend">Legend</h2>
 
@@ -66,14 +68,18 @@
   <table class="legend">
     <thead><tr><th scope="col">Category</th><th scope="col">Includes</th></tr></thead>
     <tbody>
-      {{- range sort hugo.Data.schema.categories "label" }}
+      {{- /* Like the home page's chips, only categories with an upcoming event are listed. */}}
+      {{- $catIds := slice }}
+      {{- range hugo.Data.events }}{{ with .category }}{{ $catIds = $catIds | append . }}{{ end }}{{ end }}
+      {{- $catIds = $catIds | uniq }}
+      {{- range sort (where (partial "categories.html" .) "id" "in" $catIds) "label" }}
       <tr><td><span class="pill cat-{{ .id }}">{{ .label }}</span></td><td>{{ delimit .includes ", " }}</td></tr>
       {{- end }}
     </tbody>
   </table>
 
   <h3>City</h3>
-  <p>Where the event is, from its address or venue. <em>Valley County</em> groups McCall, Cascade, Donnelly, Tamarack, and the other mountain towns as one place. <em>Other</em> means the source did not say and the event's page did not settle it. The City list shows only cities with upcoming events, and its counts follow the other filters you pick.</p>
+  <p>Where the event is, from its address or venue.{{ with $city.about.cityNote }} {{ . | safeHTML }}{{ end }} <em>Other</em> means the source did not say and the event's page did not settle it. The City list shows only cities with upcoming events, and its counts follow the other filters you pick.</p>
 
   <h2>Meetup events</h2>
   <p>Meetup group events are hidden until you check <em>Include Meetups</em>, because many groups are only partly public. The events are posted publicly, but some groups let only members RSVP or see the exact location. You may need a free Meetup account, and to join the group, before you can go.</p>
@@ -87,6 +93,6 @@
 </main>
 
 <footer class="wrap foot">
-  <p>Collected nightly from public calendars and APIs by <a href="https://github.com/rhundhausen/weekendboise">WeekendBoise</a>. <a href="{{ print $newIssue $suggest }}" rel="noopener" target="_blank">Suggest something</a>.</p>
+  <p>Collected nightly from public calendars and APIs by <a href="https://github.com/{{ $city.repo }}">{{ $city.siteName }}</a>. <a href="{{ print $newIssue $suggest }}" rel="noopener" target="_blank">Suggest something</a>.</p>
 </footer>
 {{ end }}
