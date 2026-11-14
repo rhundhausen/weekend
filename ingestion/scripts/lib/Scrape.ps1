@@ -3,7 +3,8 @@
 . "$PSScriptRoot/Http.ps1"
 
 function Get-WkRobotsGroup {
-  # Returns the rules that apply to us: a group naming WeekendBoise if there is one, otherwise *.
+  # Returns the rules that apply to us: a group naming our robots token (the city's siteName in
+  # lowercase, such as weekendboise) if there is one, otherwise *.
   [CmdletBinding()]
   param(
     [Parameter(Mandatory, Position = 0)]
@@ -40,7 +41,8 @@ function Get-WkRobotsGroup {
     }
   }
 
-  $named = @($groups | Where-Object { $_.Agents -contains 'weekendboise' })
+  $token = (Get-WkCity).robotsToken
+  $named = @($groups | Where-Object { $_.Agents -contains $token })
   $selected = if ($named.Count -gt 0) { $named } else { @($groups | Where-Object { $_.Agents -contains '*' }) }
   [pscustomobject]@{
     Rules = @($selected | ForEach-Object { $_.Rules })

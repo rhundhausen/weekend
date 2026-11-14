@@ -1,4 +1,5 @@
 BeforeAll {
+  . "$PSScriptRoot/../TestCity.ps1"
   . "$PSScriptRoot/../../scripts/lib/Links.ps1"
 
   $script:now = [DateTimeOffset]::Parse('2026-11-06T07:05:00Z')

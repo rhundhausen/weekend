@@ -49,7 +49,7 @@ function Get-GoogleCalendarPage {
     orderBy      = 'startTime'
     timeMin      = $now.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", $invariant)
     timeMax      = $now.AddDays($days).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", $invariant)
-    timeZone     = 'America/Denver'
+    timeZone     = (Get-WkTimeZone).Id
     maxResults   = '250'
     key          = $env:GOOGLE_CALENDAR_API_KEY
   }

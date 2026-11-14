@@ -1,7 +1,11 @@
 # HTTP and JSON helpers. Every outbound request goes through Invoke-WkRequest.
 
+. "$PSScriptRoot/City.ps1"
+
 function Get-WkUserAgent {
-  'WeekendBoise/1.0 (+https://github.com/rhundhausen/weekendboise)'
+  # "<siteName>/1.0 (+https://github.com/<repo>)" from city.json. The product token stays stable,
+  # so site owners' robots.txt rules keep matching it; only the contact URL after it may change.
+  (Get-WkCity).userAgent
 }
 
 function Hide-WkSecret {

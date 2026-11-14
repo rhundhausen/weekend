@@ -38,7 +38,7 @@ function ConvertFrom-IcsDate {
     try {
       $null = [TimeZoneInfo]::FindSystemTimeZoneById($zone)
     } catch {
-      Write-Warning "Unknown TZID '$zone', treating the time as America/Boise"
+      Write-Warning "Unknown TZID '$zone', treating the time as $((Get-WkTimeZone).Id)"
       $zone = $null
     }
   }
@@ -52,7 +52,7 @@ function ConvertFrom-Ics {
   .DESCRIPTION
     Handles line folding, DTSTART;VALUE=DATE, DTSTART;TZID=, the UTC Z suffix, and escaped text.
     RRULE is ignored with a warning, so a recurring event yields only its first occurrence.
-    Start and End are in the same form as an event's start: ISO 8601 with the Boise offset, or
+    Start and End are in the same form as an event's start: ISO 8601 with the city's offset, or
     YYYY-MM-DD when AllDay is true. An all-day End is inclusive, and is omitted for a single day.
   #>
   [CmdletBinding()]

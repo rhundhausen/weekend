@@ -39,18 +39,23 @@ param(
   [Parameter(Mandatory)][ValidateSet('ingest', 'refine')][string]$Kind,
   [string]$OutDir = './out',
   [string]$LogDir = './logs',
-  [string]$SourcesPath = (Join-Path $PSScriptRoot '..' 'sources.json'),
+  # Defaults to ingestion/sources.json in the city repo.
+  [string]$SourcesPath,
   [string]$PreviewPath,
   [string]$Outcome = $env:JOB_STATUS,
   [string]$RunUrl = $env:RUN_URL,
   [string]$Trigger = $env:EVENT,
   [string]$Source = $env:SOURCE,
-  [string]$ZipDir = (Join-Path ([IO.Path]::GetTempPath()) "weekendboise-report-$([guid]::NewGuid().ToString('n'))"),
-  [long]$MaxAttachmentBytes = 28MB
+  [string]$ZipDir = (Join-Path ([IO.Path]::GetTempPath()) "weekend-report-$([guid]::NewGuid().ToString('n'))"),
+  [long]$MaxAttachmentBytes = 28MB,
+  # The city repo. Defaults to $env:WEEKEND_CITY_ROOT, else the nearest folder with a city.json.
+  [string]$CityRoot
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib' 'Report.ps1')
+$null = Set-WkCityRoot $CityRoot
+if (-not $SourcesPath) { $SourcesPath = Get-WkCityPath 'ingestion' 'sources.json' }
 
 $read = {
   param([string]$Name)

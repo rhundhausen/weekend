@@ -68,7 +68,7 @@ function Get-SalesText {
 
   # File mode reads a file in the repository that the site's own data is delivered to; nothing is fetched.
   if ($Source.salesMode -eq 'file') {
-    $file = Join-Path $PSScriptRoot '..' '..' '..' $Source.path
+    $file = Get-WkCityPath $Source.path
     if (-not (Test-Path -LiteralPath $file)) { throw "$($Source.name): $($Source.path) does not exist" }
     return Get-Content -LiteralPath $file -Raw
   }

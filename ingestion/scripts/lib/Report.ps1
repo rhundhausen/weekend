@@ -1,14 +1,17 @@
 # The ingest and refine summary emails: built from out/run.json, out/refine.json, and
 # out/links.json, and sent with the Resend API. Each report is a list of sections, rendered
-# once as plain text and once as HTML so mail clients can pick.
+# once as plain text and once as HTML so mail clients can pick. Names, links, and times come
+# from the city's city.json.
+
+. "$PSScriptRoot/City.ps1"
 
 function Format-WkReportTime {
-  # An ISO UTC time as Boise time, such as "Nov 7, 2026 12:00:05 AM MST".
+  # An ISO UTC time as the city's time, such as "Nov 7, 2026 12:00:05 AM MST".
   param([string]$Value)
 
   if (-not $Value) { return '' }
   $utc = [DateTimeOffset]::Parse($Value, [Globalization.CultureInfo]::InvariantCulture).UtcDateTime
-  $zone = [TimeZoneInfo]::FindSystemTimeZoneById('America/Boise')
+  $zone = [TimeZoneInfo]::FindSystemTimeZoneById((Get-WkCity).timeZone)
   $local = [TimeZoneInfo]::ConvertTimeFromUtc($utc, $zone)
   $abbreviation = if ($zone.IsDaylightSavingTime($local)) { 'MDT' } else { 'MST' }
   "$($local.ToString('MMM d, yyyy h:mm:ss tt', [Globalization.CultureInfo]::InvariantCulture)) $abbreviation"
@@ -163,7 +166,7 @@ function New-WkIngestReport {
         , @('Workflow run:', $runLink)
       )
     )
-    $heading = 'WeekendBoise Ingest FAILED: no run.json'
+    $heading = "$((Get-WkCity).siteName) Ingest FAILED: no run.json"
     return @{ Subject = $heading; Text = ConvertTo-WkReportText $heading $sections; Html = ConvertTo-WkReportHtml $heading $sections }
   }
 
@@ -171,7 +174,7 @@ function New-WkIngestReport {
   $ok = @($results | Where-Object status -eq 'ok')
   $failed = @($results | Where-Object status -ne 'ok')
   $events = ($results | Measure-Object fetched -Sum).Sum
-  $subject = "WeekendBoise Ingest$($failedPrefix): $($ok.Count) of $($results.Count) sources ok, $events events$($failed.Count ? ", $($failed.Count) failed" : '')"
+  $subject = "$((Get-WkCity).siteName) Ingest$($failedPrefix): $($ok.Count) of $($results.Count) sources ok, $events events$($failed.Count ? ", $($failed.Count) failed" : '')"
   $pageOf = { param($name) $entry = $Sources | Where-Object name -eq $name | Select-Object -First 1; "$($entry.url)" }
 
   $trigger = "$($Context.Trigger)"
@@ -250,11 +253,11 @@ function New-WkRefineReport {
         , @('Workflow run:', $runLink)
       )
     )
-    $heading = 'WeekendBoise Refine FAILED: no refine.json'
+    $heading = "$((Get-WkCity).siteName) Refine FAILED: no refine.json"
     return @{ Subject = $heading; Text = ConvertTo-WkReportText $heading $sections; Html = ConvertTo-WkReportHtml $heading $sections }
   }
 
-  $subject = "WeekendBoise Refine$($failedPrefix): $($Refine.upcoming) upcoming, $($Refine.links.broken) broken links ($($Refine.links.newBroken) new)"
+  $subject = "$((Get-WkCity).siteName) Refine$($failedPrefix): $($Refine.upcoming) upcoming, $($Refine.links.broken) broken links ($($Refine.links.newBroken) new)"
   $linkLine = if ($Refine.skipLinkCheck) { 'Link check skipped; known link results still applied' } else { "$($Refine.links.checked)" }
   $lookup = $Refine.cityLookup
   $lookupLine = if (-not $lookup) { 'not run' }
@@ -308,11 +311,11 @@ function New-WkRefineReport {
 }
 
 function Test-WkReminderDay {
-  # True when the given UTC time is a Sunday in Boise: the Sunday midnight ingest sends the reminder.
+  # True when the given UTC time is a Sunday in the city: the Sunday midnight ingest sends the reminder.
   param([Parameter(Mandatory)][string]$At)
 
   $utc = [DateTimeOffset]::Parse($At, [Globalization.CultureInfo]::InvariantCulture).UtcDateTime
-  $local = [TimeZoneInfo]::ConvertTimeFromUtc($utc, [TimeZoneInfo]::FindSystemTimeZoneById('America/Boise'))
+  $local = [TimeZoneInfo]::ConvertTimeFromUtc($utc, [TimeZoneInfo]::FindSystemTimeZoneById((Get-WkCity).timeZone))
   $local.DayOfWeek -eq [DayOfWeek]::Sunday
 }
 
@@ -333,7 +336,7 @@ function New-WkLocalReminder {
   )
 
   $local = @($Sources | Where-Object { $_.status -eq 'running' -and $_.local } | Sort-Object displayName)
-  $subject = "WeekendBoise: run the local ingest this week ($($local.Count) source$($local.Count -eq 1 ? '' : 's'))"
+  $subject = "$((Get-WkCity).siteName): run the local ingest this week ($($local.Count) source$($local.Count -eq 1 ? '' : 's'))"
   $rows = [Collections.Generic.List[object]]::new()
   foreach ($entry in $local) {
     $stored = if ($Raw -and $Raw.sources.PSObject.Properties[$entry.name]) { $Raw.sources.($entry.name) }
@@ -341,7 +344,7 @@ function New-WkLocalReminder {
     $count = if ($stored) { "$(@($stored.events).Count) events" } else { '0 events' }
     $rows.Add(@(@{ Text = (Get-WkSourceLabel $entry.name $Sources); Url = "$($entry.url)" }, $last, $count))
   }
-  $actions = 'https://github.com/rhundhausen/weekendboise/actions/workflows/refine.yml'
+  $actions = "https://github.com/$((Get-WkCity).repo)/actions/workflows/refine.yml"
   $sections = @(
     New-WkReportSection -Title 'What this is for' -Rows @(
       , @("Some sites turn away or time out on requests from GitHub's servers, which run in Microsoft Azure, but load fine from a home connection.")
@@ -350,7 +353,7 @@ function New-WkLocalReminder {
     )
     New-WkReportSection -Title "Local sources ($($local.Count))" -Rows $rows.ToArray()
     New-WkReportSection -Title 'How to run it' -Rows @(
-      , @('1. Open PowerShell 7 in your weekendboise folder.')
+      , @("1. Open PowerShell 7 in your $(((Get-WkCity).repo -split '/')[-1]) folder.")
       , @('2. Run: ./ingestion/scripts/Invoke-LocalIngest.ps1')
       , @('3. It pulls, runs the local sources, commits data/raw-events.json, and pushes. It takes a minute or two.')
       , @('4. The push starts the refine workflow, which updates the site a few minutes later.')
@@ -368,7 +371,8 @@ function Send-WkReport {
   .SYNOPSIS
     Sends a report with the Resend API. Returns Resend's response, which has the email id.
   .PARAMETER From
-    weekendboise.com is verified in Resend, and the API key is scoped to it.
+    Defaults to the city's reportFrom ("<siteName> Reports <reports@<domain>>"). The city's domain
+    is verified in Resend, and the API key is scoped to it.
   .PARAMETER To
     One or more addresses, separated by commas or semicolons. Replies go to the same addresses.
   #>
@@ -377,7 +381,7 @@ function Send-WkReport {
     [Parameter(Mandatory)][hashtable]$Report,
     [Parameter(Mandatory)][string]$To,
     [Parameter(Mandatory)][string]$ApiKey,
-    [string]$From = 'WeekendBoise Reports <reports@weekendboise.com>',
+    [string]$From = (Get-WkCity).reportFrom,
     # Files to attach, each sent base64-encoded under its own name. Resend allows 40 MB per email.
     [string[]]$Attachment
   )

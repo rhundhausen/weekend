@@ -46,7 +46,7 @@ foreach ($item in (ConvertFrom-Ics $text)) {
     $start = $item.Start
     $end = $item.End
     if ($Source.localTimeAsUtc -and -not $item.AllDay) {
-      # Events Calendar sites set to UTC+0 label Boise wall-clock time as UTC. Read the clock as local.
+      # Events Calendar sites set to UTC+0 label local wall-clock time as UTC. Read the clock as local.
       $start = ConvertTo-LocalTime ([DateTimeOffset]::Parse($start, [Globalization.CultureInfo]::InvariantCulture).UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ss'))
       if ($end) { $end = ConvertTo-LocalTime ([DateTimeOffset]::Parse($end, [Globalization.CultureInfo]::InvariantCulture).UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ss')) }
     }

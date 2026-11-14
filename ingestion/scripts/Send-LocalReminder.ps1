@@ -5,7 +5,7 @@
 .DESCRIPTION
   Some sites turn away or time out on GitHub's servers but load from a home connection. Those
   sources are marked local in sources.json; the nightly ingest skips them and keeps their last
-  fetch. The scheduled ingest at midnight Sunday, Boise time, calls this script, which emails
+  fetch. The scheduled ingest at midnight Sunday, city time, calls this script, which emails
   REPORT_EMAIL a reminder with each local source's last fetch and how to run
   Invoke-LocalIngest.ps1. Any other run, or a week with no local sources, sends nothing.
 
@@ -26,14 +26,20 @@ param(
   [string]$Trigger = $env:EVENT,
   [switch]$Force,
   [string]$RunUrl = $env:RUN_URL,
-  [string]$SourcesPath = (Join-Path $PSScriptRoot '..' 'sources.json'),
-  [string]$RawPath = (Join-Path $PSScriptRoot '..' '..' 'data' 'raw-events.json'),
-  [string]$PreviewPath
+  # Default to ingestion/sources.json and data/raw-events.json in the city repo.
+  [string]$SourcesPath,
+  [string]$RawPath,
+  [string]$PreviewPath,
+  # The city repo. Defaults to $env:WEEKEND_CITY_ROOT, else the nearest folder with a city.json.
+  [string]$CityRoot
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib' 'Report.ps1')
 . (Join-Path $PSScriptRoot 'lib' 'Raw.ps1')
+$null = Set-WkCityRoot $CityRoot
+if (-not $SourcesPath) { $SourcesPath = Get-WkCityPath 'ingestion' 'sources.json' }
+if (-not $RawPath) { $RawPath = Get-WkCityPath 'data' 'raw-events.json' }
 
 if (-not $Force -and ($Trigger -ne 'schedule' -or -not (Test-WkReminderDay $At))) {
   Write-Host 'Not the scheduled Sunday run, so no local ingest reminder'

@@ -1,21 +1,28 @@
 #Requires -Version 7.4
 <#
 .SYNOPSIS
-  Validates sources.json against schema/sources.schema.json.
+  Validates sources.json against schema/sources.schema.json, with the city's cities from city.json.
 .DESCRIPTION
   Every entry is checked on its own. A problem in a running entry, a duplicate name, or a file
   that doesn't parse fails with a non-zero exit, because ingest can't run safely. A problem in
   any other entry (an idea, a candidate, a ruled-out site) is a warning, so a half-written idea
   never stops the nightly run.
 .PARAMETER Path
-  Sources file to validate. Defaults to sources.json in the ingestion root.
+  Sources file to validate. Defaults to ingestion/sources.json in the city repo.
+.PARAMETER CityRoot
+  The city repo. Defaults to $env:WEEKEND_CITY_ROOT, else the nearest folder at or above the
+  current directory with a city.json.
 #>
 [CmdletBinding()]
 param(
-  [string]$Path = (Join-Path $PSScriptRoot '..' 'sources.json')
+  [string]$Path,
+  [string]$CityRoot
 )
 
-$schemaPath = Join-Path $PSScriptRoot '..' 'schema' 'sources.schema.json'
+. (Join-Path $PSScriptRoot 'lib' 'City.ps1')
+$null = Set-WkCityRoot $CityRoot
+if (-not $Path) { $Path = Get-WkCityPath 'ingestion' 'sources.json' }
+$schemaText = Get-WkSchemaText sources
 
 if (-not (Test-Path -LiteralPath $Path)) {
   Write-Error "Sources file not found: $Path" -ErrorAction Continue
@@ -41,7 +48,7 @@ if ($null -ne $document._comment) { $wrapper._comment = $document._comment }
 foreach ($property in $document.PSObject.Properties.Name | Where-Object { $_ -notin 'sources', '_comment' }) {
   $wrapper[$property] = $document.$property
 }
-if (-not ($wrapper | ConvertTo-Json -Depth 3 | Test-Json -SchemaFile $schemaPath -ErrorAction SilentlyContinue)) {
+if (-not ($wrapper | ConvertTo-Json -Depth 3 | Test-Json -Schema $schemaText -ErrorAction SilentlyContinue)) {
   Write-Host 'FAIL: File does not match schema/sources.schema.json outside the sources list'
   exit 1
 }
@@ -55,7 +62,7 @@ function Get-SourceLabel {
 for ($i = 0; $i -lt $sources.Count; $i++) {
   $entry = $sources[$i]
   $single = @{ sources = @($entry) } | ConvertTo-Json -Depth 10
-  if ($single | Test-Json -SchemaFile $schemaPath -ErrorAction SilentlyContinue) { continue }
+  if ($single | Test-Json -Schema $schemaText -ErrorAction SilentlyContinue) { continue }
 
   $message = "$(Get-SourceLabel $entry $i) does not match schema/sources.schema.json"
   if ($entry.status -eq 'running') { $failures.Add($message) } else { $warnings.Add($message) }

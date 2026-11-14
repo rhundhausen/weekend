@@ -22,11 +22,14 @@
     file's asOf, as lastIngest) next to OutputPath, and refine.json and links.json to OutDir.
 
   Running it again over the same raw file is safe, so it can be rerun by hand as the rules change.
+.PARAMETER CityRoot
+  The city repo. Defaults to $env:WEEKEND_CITY_ROOT, else the nearest folder at or above the
+  current directory with a city.json.
 .PARAMETER InputPath
-  The raw file. Defaults to data/raw-events.json.
+  The raw file. Defaults to data/raw-events.json in the city repo.
 .PARAMETER OutputPath
   The events file to write. archive/, links.json, and meta.json are written in the same folder.
-  Defaults to data/events.json.
+  Defaults to data/events.json in the city repo.
 .PARAMETER SkipLinkCheck
   Make no link requests. Known link results from links.json still apply. -NoWrite implies it.
 .PARAMETER SkipCityLookup
@@ -42,14 +45,16 @@
 .PARAMETER LinkBudgetSeconds
   How long the link check may spend making requests. Links left over wait for a later run.
 .PARAMETER SourcesPath
-  The sources file, for priorities and which sources are running. Used by tests.
+  The sources file, for priorities and which sources are running. Defaults to
+  ingestion/sources.json in the city repo. Used by tests.
 .PARAMETER Now
   The time to sort past from upcoming by. Defaults to now. Used by tests.
 #>
 [CmdletBinding()]
 param(
-  [string]$InputPath = (Join-Path $PSScriptRoot '..' '..' 'data' 'raw-events.json'),
-  [string]$OutputPath = (Join-Path $PSScriptRoot '..' '..' 'data' 'events.json'),
+  [string]$CityRoot,
+  [string]$InputPath,
+  [string]$OutputPath,
   [switch]$SkipLinkCheck,
   [switch]$SkipCityLookup,
   [switch]$NoWrite,
@@ -57,7 +62,7 @@ param(
   [int]$Days = 180,
   [int]$LinkBudgetSeconds = 900,
   [int]$CityBudgetSeconds = 180,
-  [string]$SourcesPath = (Join-Path $PSScriptRoot '..' 'sources.json'),
+  [string]$SourcesPath,
   [DateTimeOffset]$Now = [DateTimeOffset]::UtcNow
 )
 
@@ -69,6 +74,11 @@ $startedAt = & $stamp
 . (Join-Path $PSScriptRoot 'lib' 'Cities.ps1')
 . (Join-Path $PSScriptRoot 'lib' 'Links.ps1')
 . (Join-Path $PSScriptRoot 'lib' 'CityLookup.ps1')
+
+$null = Set-WkCityRoot $CityRoot
+if (-not $InputPath) { $InputPath = Get-WkCityPath 'data' 'raw-events.json' }
+if (-not $OutputPath) { $OutputPath = Get-WkCityPath 'data' 'events.json' }
+if (-not $SourcesPath) { $SourcesPath = Get-WkCityPath 'ingestion' 'sources.json' }
 
 $rawFile = [IO.Path]::GetFullPath($InputPath, $PWD.Path)
 $dataPath = [IO.Path]::GetFullPath($OutputPath, $PWD.Path)
@@ -99,7 +109,7 @@ $carried = @(Get-CarriedWkEvents $existing -Refreshed $refreshed -Enabled $runni
 # Events stored before the cost tier change carry cost and costGuess; move them to costTier
 # before the merge compares tiers. A no-op once every stored file has been rewritten.
 $legacyCosts = Update-WkLegacyCost (@($rawEvents) + $carried)
-# An aggregator's "Various locations" event whose title names a known venue ("... at Zoo Boise")
+# An aggregator's "Various locations" event whose title names a known venue ("... at Zoo Boise" in Boise)
 # takes that venue first, so it can merge with the venue's own listing.
 $titleVenues = Resolve-WkTitleVenue (@($rawEvents) + $carried)
 $merged = @(Merge-WkEvents (@($rawEvents) + $carried) -Priorities $priorities -DropCanceled)

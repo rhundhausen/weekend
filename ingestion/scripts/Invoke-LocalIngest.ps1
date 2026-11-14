@@ -1,7 +1,7 @@
 #Requires -Version 7.4
 <#
 .SYNOPSIS
-  Runs the local sources from a home connection and publishes them. Run from the repo root, about
+  Runs the local sources from a home connection and publishes them. Run from the city repo, about
   once a week, when the Sunday reminder email arrives.
 .DESCRIPTION
   Some sites turn away or time out on GitHub's servers but load from a home connection. Those
@@ -16,23 +16,26 @@
   rebuilds the site's data and deploys it. The commit has no [skip ci], because GitHub would then
   skip refine too; Cloudflare also builds it, which changes nothing on the site.
 
-  API keys, if a local source ever needs one, come from .env.ps1 when it exists.
+  API keys, if a local source ever needs one, come from environment variables only: set them in
+  the shell before running this.
+.PARAMETER CityRoot
+  The city repo. Defaults to $env:WEEKEND_CITY_ROOT, else the nearest folder at or above the
+  current directory with a city.json.
 .PARAMETER NoPublish
   Fetch and write the raw file, but don't commit or push.
 #>
 [CmdletBinding()]
-param([switch]$NoPublish)
+param([string]$CityRoot, [switch]$NoPublish)
 
 $ErrorActionPreference = 'Stop'
-$root = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
+. (Join-Path $PSScriptRoot 'lib' 'City.ps1')
+$root = Set-WkCityRoot $CityRoot
 Push-Location $root
 try {
   if (-not $NoPublish) {
     git pull --ff-only
     if ($LASTEXITCODE -ne 0) { throw 'git pull failed; commit or stash your changes, then run this again' }
   }
-  $envFile = Join-Path $root '.env.ps1'
-  if (Test-Path -LiteralPath $envFile) { . $envFile }
 
   & (Join-Path $PSScriptRoot 'Invoke-Ingest.ps1') -Local
   if ($LASTEXITCODE -ne 0) { throw 'No local source succeeded, so nothing was published' }

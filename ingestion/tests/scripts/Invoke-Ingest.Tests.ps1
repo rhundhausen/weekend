@@ -1,4 +1,5 @@
 BeforeAll {
+  . "$PSScriptRoot/../TestCity.ps1"
   $script:ingest = Join-Path $PSScriptRoot '..' '..' 'scripts' 'Invoke-Ingest.ps1'
   . "$PSScriptRoot/../../scripts/lib/Raw.ps1"
   $schemaLib = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' 'scripts' 'lib' 'Schema.ps1')).Path

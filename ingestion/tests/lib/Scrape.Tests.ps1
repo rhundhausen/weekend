@@ -1,4 +1,5 @@
 BeforeAll {
+  . "$PSScriptRoot/../TestCity.ps1"
   . "$PSScriptRoot/../../scripts/lib/Scrape.ps1"
 }
 

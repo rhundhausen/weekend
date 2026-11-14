@@ -2,25 +2,31 @@
 <#
 .SYNOPSIS
   Commits the given data paths and pushes them, if they changed. Used by the ingest and refine
-  workflows. Run from the repo root.
+  workflows. Run from the city repo's root.
 .PARAMETER Path
   The files or folders to commit, relative to the repo root. Nothing else is staged, so each
   workflow commits only the files it owns.
 .PARAMETER Message
-  The commit subject. The Boise date is appended.
+  The commit subject. The city's local date is appended.
 .PARAMETER SkipDeploy
   Add [skip ci], so Cloudflare Workers Builds doesn't deploy the commit. Ingest uses it, because
   the site doesn't read the raw file.
+.PARAMETER CityRoot
+  The city repo whose city.json names the commit author. Defaults to $env:WEEKEND_CITY_ROOT, else
+  the nearest folder at or above the current directory with a city.json.
 #>
 [CmdletBinding()]
 param(
   [Parameter(Mandatory)][string[]]$Path,
   [Parameter(Mandatory)][string]$Message,
-  [switch]$SkipDeploy
+  [switch]$SkipDeploy,
+  [string]$CityRoot
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib' 'Schema.ps1')
+$null = Set-WkCityRoot $CityRoot
+$city = Get-WkCity
 
 function Invoke-Git {
   git @args
@@ -40,7 +46,7 @@ $date = (ConvertTo-LocalTime ([DateTimeOffset]::UtcNow)).Substring(0, 10)
 # commit is what puts the new data on the site. The test workflow doesn't run either way, because
 # GitHub never starts workflows from a push made with the workflow's own GITHUB_TOKEN.
 $subject = "$Message $date$($SkipDeploy ? ' [skip ci]' : '')"
-$bot = @('-c', 'user.name=WeekendBoise bot', '-c', 'user.email=weekendboise-bot@noreply.invalid')
+$bot = @('-c', "user.name=$($city.botName)", '-c', "user.email=$($city.botEmail)")
 Invoke-Git @bot commit -m $subject
 
 # Push to the branch the run was triggered on. GitHub Actions sets GITHUB_REF.

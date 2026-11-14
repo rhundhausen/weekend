@@ -1,4 +1,5 @@
 BeforeAll {
+  . "$PSScriptRoot/../TestCity.ps1"
   . "$PSScriptRoot/../../scripts/lib/Cities.ps1"
 
   function New-OtherEvent {

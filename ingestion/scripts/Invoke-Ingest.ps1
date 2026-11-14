@@ -29,10 +29,13 @@
   scheduled midnight, because GitHub often starts scheduled runs late. Defaults to the time the
   run started. A -Source run keeps the raw file's asOf. Event fetchedAt times always use the real
   time.
+.PARAMETER CityRoot
+  The city repo. Defaults to $env:WEEKEND_CITY_ROOT, else the nearest folder at or above the
+  current directory with a city.json.
 .PARAMETER RawPath
-  The raw file. Defaults to data/raw-events.json.
+  The raw file. Defaults to data/raw-events.json in the city repo.
 .PARAMETER SourcesPath
-  The sources file. Defaults to sources.json in the ingestion root. Used by tests.
+  The sources file. Defaults to ingestion/sources.json in the city repo. Used by tests.
 .PARAMETER AdapterDir
   Where the adapter scripts are. Used by tests.
 #>
@@ -43,14 +46,19 @@ param(
   [switch]$NoWrite,
   [switch]$Local,
   [ValidatePattern('^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$')][string]$AsOf,
-  [string]$RawPath = (Join-Path $PSScriptRoot '..' '..' 'data' 'raw-events.json'),
-  [string]$SourcesPath = (Join-Path $PSScriptRoot '..' 'sources.json'),
+  [string]$CityRoot,
+  [string]$RawPath,
+  [string]$SourcesPath,
   [string]$AdapterDir = (Join-Path $PSScriptRoot 'adapters')
 )
 
 $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'lib' 'Raw.ps1')
+
+$null = Set-WkCityRoot $CityRoot
+if (-not $RawPath) { $RawPath = Get-WkCityPath 'data' 'raw-events.json' }
+if (-not $SourcesPath) { $SourcesPath = Get-WkCityPath 'ingestion' 'sources.json' }
 
 $rawFile = [IO.Path]::GetFullPath($RawPath, $PWD.Path)
 $outPath = [IO.Path]::GetFullPath($OutDir, $PWD.Path)

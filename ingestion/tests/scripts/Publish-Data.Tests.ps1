@@ -1,4 +1,5 @@
 BeforeAll {
+  . "$PSScriptRoot/../TestCity.ps1"
   $script:publish = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' 'scripts' 'Publish-Data.ps1')).Path
 
   function Invoke-InRepo {

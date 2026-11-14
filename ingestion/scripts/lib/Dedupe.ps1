@@ -59,10 +59,7 @@ $script:TitleStopWords = [Collections.Generic.HashSet[string]]::new([string[]]@(
     'a', 'an', 'and', 'at', 'by', 'event', 'feat', 'featuring', 'for', 'ft', 'game', 'in', 'live', 'night', 'of',
     'on', 'presents', 'show', 'the', 'to', 'tour', 'v', 'vs', 'w', 'with'
   ))
-$script:TitleExpansions = @{
-  bsu = 'boise state university'
-  nnu = 'northwest nazarene university'
-}
+# Short forms are the city's titleAbbreviations in city.json, such as bsu for boise state university.
 
 function Test-WkCanceledTitle {
   # True for titles like "CANCELED - Play and Learn" or "CANCELLED Ping-Pong Club".
@@ -88,9 +85,10 @@ function Get-WkTitleWords {
   param([Parameter(Mandatory, Position = 0)][AllowEmptyString()][string]$MatchTitle)
 
   $words = [Collections.Generic.HashSet[string]]::new()
+  $expansions = (Get-WkCity).titleAbbreviations
   foreach ($word in ($MatchTitle -split ' ')) {
     if (-not $word) { continue }
-    $parts = if ($script:TitleExpansions.ContainsKey($word)) { $script:TitleExpansions[$word] -split ' ' } else { @($word) }
+    $parts = if ($expansions.ContainsKey($word)) { $expansions[$word] -split ' ' } else { @($word) }
     foreach ($part in $parts) {
       if (-not $script:TitleStopWords.Contains($part)) { $null = $words.Add($part) }
     }
@@ -161,7 +159,7 @@ function Test-WkPlaceholderVenue {
   if (-not $v) { return $true }
   if ($City -and $v -eq $City) { return $true }
   $v -match '(?i)^(?:various\b.*|tba|tbd|to be announced|to be determined)$' -or
-  $v -match '(?i)^[a-z .'']+,\s*(?:id|idaho)\b[\s\d-]*$'
+  $v -match "(?i)^[a-z .']+,\s*(?:$(Get-WkStatePattern))\b[\s\d-]*$"
 }
 
 function Merge-WkEvents {

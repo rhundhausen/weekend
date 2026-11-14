@@ -81,7 +81,7 @@ function ConvertFrom-ScrapeDate {
   }
 
   if ($Source.localTimeAsUtc) {
-    # Modern Events Calendar writes Boise wall-clock time as if it were UTC, then shifts it.
+    # Modern Events Calendar writes local wall-clock time as if it were UTC, then shifts it.
     $wall = [DateTime]::SpecifyKind($parsed.UtcDateTime, [DateTimeKind]::Unspecified)
     return @{ Value = ConvertTo-LocalTime $wall; AllDay = $false }
   }
@@ -104,7 +104,7 @@ function New-ScrapeEvent {
   $name = if ($Source.fixedVenue) { '' } else { ConvertTo-PlainText $VenueName }
   $city = $null
   foreach ($part in ((ConvertTo-PlainText $CityText) -split ',')) {
-    $city = Resolve-WkCity ($part -replace '\s+ID(\s+\d{5})?$', '')
+    $city = Resolve-WkCity ($part -replace "\s+($(Get-WkStatePattern))(\s+\d{5})?$", '')
     if ($city) { break }
   }
 
@@ -222,7 +222,7 @@ function ConvertFrom-ClockTime {
 
 function Read-CardsSource {
   # A card holds one or more dates (month and day, no year), a title, and a link. The default
-  # patterns read Boise Centre's markup; datePattern, titlePattern, and timePattern override them.
+  # patterns read a common month/day card markup (class="month" and class="day"); datePattern, titlePattern, and timePattern override them.
   $html = if ($Response) { $Response[0] } else { Get-ScrapePage $listUri }
   $invariant = [Globalization.CultureInfo]::InvariantCulture
   $now = [DateTime]::ParseExact($today, 'yyyy-MM-dd', $invariant)
@@ -288,7 +288,7 @@ function Read-CardsSource {
 }
 
 function ConvertFrom-CalendarAppTime {
-  # The calendar app writes Boise wall-clock time as "yyyy-MM-dd HH:mm", or a bare date for all-day.
+  # The calendar app writes local wall-clock time as "yyyy-MM-dd HH:mm", or a bare date for all-day.
   param([string]$Value)
 
   if ($Value -match '^\d{4}-\d{2}-\d{2}$') { return @{ Value = $Value; AllDay = $true } }
@@ -414,7 +414,7 @@ function ConvertFrom-ChamberMasterLocation {
 
   # A location that starts with the house number has no name, so the source venue is used.
   $text = ($Location -replace '\s+', ' ').Trim()
-  $match = [regex]::Match($text, '^(?:(?<name>.*?)\s+)?\d+\s+(?<street>.*?)(?:,\s*(?:ID|Idaho)\b.*)?$')
+  $match = [regex]::Match($text, "^(?:(?<name>.*?)\s+)?\d+\s+(?<street>.*?)(?:,\s*(?:$(Get-WkStatePattern))\b.*)?$")
   $name = if ($match.Success) { $match.Groups['name'].Value } else { ($text -split ',')[0] }
   $street = if ($match.Success) { $match.Groups['street'].Value } else { $text }
 
@@ -489,7 +489,7 @@ function Read-ChamberMasterSource {
 function Read-SvelteKitSource {
   # A SvelteKit chamber site (staridahochamber.com) that serves its ChamberMaster calendar as page
   # data: kit.start(..., { data: [...] }) holds one entry per page node, and the events node has
-  # events (Id, Name, Description, StartTime, EndTime, IsAllDay, Slug, in Boise wall-clock time) and
+  # events (Id, Name, Description, StartTime, EndTime, IsAllDay, Slug, in local wall-clock time) and
   # eventDetails (the same Ids, with EventLocation). Event pages are /events/details/<slug>-<id>.
   $html = if ($Response) { $Response[0] } else { Get-ScrapePage $listUri }
   $match = [regex]::Match($html, '(?s)kit\.start\(app,\s*element,\s*\{.*?\bdata:\s*(?<d>\[.*?\])\s*,\s*form:')

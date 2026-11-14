@@ -1,10 +1,11 @@
 #Requires -Version 7.4
 <#
 .SYNOPSIS
-  Decides whether a scheduled workflow run is the one for a given hour in Boise.
+  Decides whether a scheduled workflow run is the one for a given hour in the city's time zone.
 .DESCRIPTION
-  Cron is UTC and Boise is UTC-6 in summer and UTC-7 in winter, so a workflow schedules both UTC
-  hours and calls this to skip the one that isn't the target hour in Boise that day. A manual run
+  Cron is UTC and most zones shift an hour for daylight saving (Boise is UTC-6 in summer and UTC-7
+  in winter), so a workflow schedules both UTC hours and calls this to skip the one that isn't the
+  target hour in the city that day. A manual run
   (any event other than schedule) always runs.
 
   Scheduled runs can start late, so it checks the scheduled hour, not the clock. For a scheduled
@@ -13,7 +14,10 @@
 
   Returns an object with Run (bool) and At (string, empty for a manual run).
 .PARAMETER Hour
-  The target hour in Boise, 0 to 23. Ingest uses 0 (midnight).
+  The target hour in the city, 0 to 23. Ingest uses 0 (midnight).
+.PARAMETER TimeZone
+  The IANA zone. Defaults to timeZone in the city's city.json (see lib/City.ps1 for how the city
+  repo is found).
 .PARAMETER EventName
   github.event_name. Defaults to the EVENT environment variable.
 .PARAMETER Schedule
@@ -26,10 +30,15 @@ param(
   [Parameter(Mandatory)][ValidateRange(0, 23)][int]$Hour,
   [string]$EventName = $env:EVENT,
   [string]$Schedule = $env:SCHEDULE,
-  [DateTime]$Today = [DateTime]::UtcNow.Date
+  [DateTime]$Today = [DateTime]::UtcNow.Date,
+  [string]$TimeZone
 )
 
 $ErrorActionPreference = 'Stop'
+if (-not $TimeZone) {
+  . (Join-Path $PSScriptRoot 'lib' 'City.ps1')
+  $TimeZone = (Get-WkCity).timeZone
+}
 
 $run = $true
 $at = ''
@@ -40,10 +49,10 @@ if ($EventName -eq 'schedule') {
     throw "Can't read the hour from the cron line '$Schedule'"
   }
   $scheduled = [DateTime]::SpecifyKind($Today.Date.AddHours($utcHour), 'Utc')
-  $boise = [TimeZoneInfo]::ConvertTimeFromUtc($scheduled, [TimeZoneInfo]::FindSystemTimeZoneById('America/Boise'))
-  $run = $boise.Hour -eq $Hour
+  $local = [TimeZoneInfo]::ConvertTimeFromUtc($scheduled, [TimeZoneInfo]::FindSystemTimeZoneById($TimeZone))
+  $run = $local.Hour -eq $Hour
   $at = $scheduled.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", [Globalization.CultureInfo]::InvariantCulture)
-  Write-Host "Scheduled '$Schedule' is $($boise.ToString('HH:mm')) in Boise, target hour $Hour; run: $($run.ToString().ToLowerInvariant())"
+  Write-Host "Scheduled '$Schedule' is $($local.ToString('HH:mm')) in $TimeZone, target hour $Hour; run: $($run.ToString().ToLowerInvariant())"
 }
 
 if ($env:GITHUB_OUTPUT) {

@@ -44,7 +44,7 @@ foreach ($item in ($pages | ForEach-Object { $_.events } | Where-Object { $_ }))
       $end = $item.end_date.Substring(0, 10)
       if ($end -le $start) { $end = $null }
     } elseif ($Source.localTimeAsUtc) {
-      # A site set to UTC+0 writes Boise wall-clock time in every field, so read start_date as local.
+      # A site set to UTC+0 writes local wall-clock time in every field, so read start_date as local.
       $invariant = [Globalization.CultureInfo]::InvariantCulture
       $start = ConvertTo-LocalTime ([DateTime]::ParseExact($item.start_date, 'yyyy-MM-dd HH:mm:ss', $invariant))
       $end = ConvertTo-LocalTime ([DateTime]::ParseExact($item.end_date, 'yyyy-MM-dd HH:mm:ss', $invariant))

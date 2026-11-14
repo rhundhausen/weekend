@@ -1,18 +1,20 @@
 # Event schema helpers. See schema/event.schema.json and docs/schema.md.
 
+. "$PSScriptRoot/City.ps1"
 . "$PSScriptRoot/Cost.ps1"
 
 function Get-WkTimeZone {
-  [TimeZoneInfo]::FindSystemTimeZoneById('America/Boise')
+  # The city's zone, from city.json.
+  Get-WkCityCached 'timeZone' { [TimeZoneInfo]::FindSystemTimeZoneById((Get-WkCity).timeZone) }
 }
 
 function ConvertTo-LocalTime {
   <#
   .SYNOPSIS
-    Converts a DateTime, DateTimeOffset, or string to ISO 8601 with the Boise offset.
+    Converts a DateTime, DateTimeOffset, or string to ISO 8601 with the city's offset.
   .DESCRIPTION
     A value with no zone information of its own (an unspecified DateTime, or a string with no
-    offset) is read as SourceTimeZone, which defaults to America/Boise.
+    offset) is read as SourceTimeZone, which defaults to the city's time zone (city.json).
   #>
   [CmdletBinding()]
   [OutputType([string])]
@@ -24,8 +26,8 @@ function ConvertTo-LocalTime {
     [string]$SourceTimeZone
   )
 
-  $boise = Get-WkTimeZone
-  $sourceZone = if ($SourceTimeZone) { [TimeZoneInfo]::FindSystemTimeZoneById($SourceTimeZone) } else { $boise }
+  $local = Get-WkTimeZone
+  $sourceZone = if ($SourceTimeZone) { [TimeZoneInfo]::FindSystemTimeZoneById($SourceTimeZone) } else { $local }
   $invariant = [Globalization.CultureInfo]::InvariantCulture
 
   if ($Value -is [string]) {
@@ -40,14 +42,14 @@ function ConvertTo-LocalTime {
     { $_ -is [DateTimeOffset] } { $_; break }
     { $_ -is [DateTime] -and $_.Kind -ne [DateTimeKind]::Unspecified } { [DateTimeOffset]::new($_); break }
     { $_ -is [DateTime] } { [DateTimeOffset]::new($_, $sourceZone.GetUtcOffset($_)); break }
-    default { throw "Cannot convert value of type $($Value.GetType().Name) to a Boise time" }
+    default { throw "Cannot convert value of type $($Value.GetType().Name) to a local time" }
   }
 
-  [TimeZoneInfo]::ConvertTime($instant, $boise).ToString('yyyy-MM-ddTHH:mm:sszzz', $invariant)
+  [TimeZoneInfo]::ConvertTime($instant, $local).ToString('yyyy-MM-ddTHH:mm:sszzz', $invariant)
 }
 
 function Get-WkEventInstant {
-  # Date-only values count as midnight in Boise.
+  # Date-only values count as midnight in the city.
   [CmdletBinding()]
   [OutputType([DateTimeOffset])]
   param(
@@ -121,15 +123,16 @@ function Resolve-WkCity {
     [string]$Name
   )
 
-  foreach ($city in 'Boise', 'Meridian', 'Nampa', 'Caldwell', 'Eagle', 'Garden City', 'Kuna', 'Star', 'Emmett', 'Marsing', 'Middleton', 'Mountain Home', 'Payette', 'Weiser', 'Valley County') {
-    if ($Name.Trim() -ieq $city) { return $city }
+  # The city's cities, and its cityAliases: other place names that count as one of them.
+  $names = Get-WkCityCached 'resolveCity' {
+    $city = Get-WkCity
+    $map = @{}
+    foreach ($alias in $city.cityAliases.Keys) { $map[$alias.ToLowerInvariant()] = $city.cityAliases[$alias] }
+    foreach ($name in $city.cities) { $map[$name.ToLowerInvariant()] = $name }
+    $map
   }
-  # The mountain towns are one location, Valley County, not a city each. New Meadows (Adams
-  # County) and Riggins (Idaho County) are outside Valley County but are grouped with it on purpose.
-  foreach ($town in 'McCall', 'Cascade', 'Donnelly', 'Tamarack', 'Lake Fork', 'Yellow Pine', 'New Meadows', 'Riggins') {
-    if ($Name.Trim() -ieq $town) { return 'Valley County' }
-  }
-  $null
+  if (-not $Name) { return $null }
+  $names[$Name.Trim().ToLowerInvariant()]
 }
 
 function ConvertFrom-WkLocation {
@@ -156,7 +159,7 @@ function ConvertFrom-WkLocation {
   $remaining = [System.Collections.Generic.List[string]]::new()
   foreach ($part in ($Location -split ',')) {
     $part = $part.Trim()
-    if (-not $part -or $part -match '^(ID|Idaho)(\s+\d{5}(-\d{4})?)?$' -or $part -match '^\d{5}(-\d{4})?$') { continue }
+    if (-not $part -or $part -match "^($(Get-WkStatePattern))(\s+\d{5}(-\d{4})?)?$" -or $part -match '^\d{5}(-\d{4})?$') { continue }
     $known = Resolve-WkCity $part
     if ($known) {
       if (-not $city) { $city = $known }
@@ -174,21 +177,21 @@ function ConvertFrom-WkLocation {
 }
 
 function Get-WkTagRules {
-  # Loads data/schema/tags.json once and compiles one regex per tag.
-  if ($script:WkTagRules) { return $script:WkTagRules }
-
-  $path = Join-Path $PSScriptRoot '..' '..' '..' 'data' 'schema' 'tags.json'
-  $script:WkTagRules = @(Get-Content -LiteralPath $path -Raw | ConvertFrom-Json | ForEach-Object {
-      $pattern = '\b(' + (($_.keywords | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')\b'
-      [pscustomobject]@{
-        Id       = $_.id
-        Category = $_.category
-        Regex    = [regex]::new($pattern, [Text.RegularExpressions.RegexOptions]::Compiled)
-        Labels   = @($_.sourceLabels)
-        Fallback = [bool]$_.fallback
-      }
-    })
-  $script:WkTagRules
+  # Loads the tags (ingestion/vocabulary/tags.json plus the city's data/schema/tags.json) once and
+  # compiles one regex per tag. A tag with no keywords matches only its sourceLabels.
+  Get-WkCityCached 'tagRules' {
+    @(Get-WkVocabulary tags | ForEach-Object {
+        $keywords = @($_.keywords | Where-Object { $_ })
+        $pattern = if ($keywords) { '\b(' + (($keywords | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')\b' } else { '(?!)' }
+        [pscustomobject]@{
+          Id       = $_.id
+          Category = $_.category
+          Regex    = [regex]::new($pattern, [Text.RegularExpressions.RegexOptions]::Compiled)
+          Labels   = @($_.sourceLabels)
+          Fallback = [bool]$_.fallback
+        }
+      })
+  }
 }
 
 function Get-WkClassification {
@@ -275,11 +278,10 @@ function Resolve-WkVenueAlias {
   # Returns the canonical venue for a key in data/schema/venue-aliases.json, or $null.
   param([string]$VenueKey)
 
-  if (-not $script:WkVenueAliases) {
-    $path = Join-Path $PSScriptRoot '..' '..' '..' 'data' 'schema' 'venue-aliases.json'
-    $script:WkVenueAliases = (Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -AsHashtable).aliases
+  $aliases = Get-WkCityCached 'venueAliases' {
+    (Get-Content -LiteralPath (Get-WkCityPath 'data' 'schema' 'venue-aliases.json') -Raw | ConvertFrom-Json -AsHashtable).aliases
   }
-  $script:WkVenueAliases[$VenueKey]
+  $aliases[$VenueKey]
 }
 
 function Get-WkEventSize {
@@ -306,11 +308,9 @@ function Get-WkEventSize {
     [string[]]$Tags = @()
   )
 
-  if (-not $script:WkSizeRules) {
-    $path = Join-Path $PSScriptRoot '..' '..' '..' 'data' 'schema' 'sizes.json'
-    $script:WkSizeRules = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -AsHashtable
+  $rules = Get-WkCityCached 'sizeRules' {
+    Get-Content -LiteralPath (Get-WkCityPath 'data' 'schema' 'sizes.json') -Raw | ConvertFrom-Json -AsHashtable
   }
-  $rules = $script:WkSizeRules
 
   if (@($Tags | Where-Object { $_ -in $rules.smallTags }).Count -gt 0) { return 'S' }
   if ($rules.venues.ContainsKey($VenueKey)) { return $rules.venues[$VenueKey] }
@@ -331,7 +331,7 @@ function Test-WkEvent {
   )
 
   begin {
-    $schema = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..' '..' 'schema' 'event.schema.json') -Raw
+    $schema = Get-WkSchemaText event
   }
   process {
     $Event | ConvertTo-Json -Depth 6 | Test-Json -Schema $schema -ErrorAction SilentlyContinue
@@ -361,16 +361,14 @@ function ConvertTo-WkTitleCase {
   $words = [regex]::Matches($Title, "\p{Lu}+(?:['$([char]0x2019)]\p{Lu}+)*")
   if ($words.Count -lt 2) { return $original }
 
-  if (-not $script:WkTitleCase) {
-    $path = Join-Path $PSScriptRoot '..' '..' '..' 'data' 'schema' 'title-case.json'
-    $rules = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -AsHashtable
-    $script:WkTitleCase = @{
-      KeepUpper  = [Collections.Generic.HashSet[string]]::new([string[]]$rules.keepUpper)
-      Forms      = $rules.forms
-      SmallWords = [Collections.Generic.HashSet[string]]::new([string[]]$rules.smallWords)
+  $rules = Get-WkCityCached 'titleCase' {
+    $table = Get-WkVocabulary title-case
+    @{
+      KeepUpper  = [Collections.Generic.HashSet[string]]::new([string[]]$table.keepUpper)
+      Forms      = $table.forms
+      SmallWords = [Collections.Generic.HashSet[string]]::new([string[]]$table.smallWords)
     }
   }
-  $rules = $script:WkTitleCase
 
   $out = [Text.StringBuilder]::new()
   $last = 0

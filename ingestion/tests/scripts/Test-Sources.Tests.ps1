@@ -1,6 +1,7 @@
 BeforeAll {
+  . "$PSScriptRoot/../TestCity.ps1"
   $script:testSources = Join-Path $PSScriptRoot '..' '..' 'scripts' 'Test-Sources.ps1'
-  $script:repoSources = Join-Path $PSScriptRoot '..' '..' 'sources.json'
+  $script:repoSources = Join-Path $FixtureCity 'ingestion' 'sources.json'
 
   # A complete running entry. Tests copy it and change one thing.
   function New-RunningEntry {

@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rhundhausen/weekend/blob/main/ingestion/schema/city.schema.json",
+  "title": "Weekend city",
+  "description": "A city repo's city.json: every city fact the engine's scripts and website use.",
+  "type": "object",
+  "required": ["siteName", "domain", "repo", "cityName", "timeZone", "state", "cities", "coordinates", "description", "logDatabase", "about"],
+  "additionalProperties": false,
+  "properties": {
+    "_comment": { "type": "string" },
+    "siteName": {
+      "type": "string",
+      "description": "The site's name, such as WeekendBoise. Also the User-Agent product token (keep it stable, since site owners' robots.txt rules match it), the robots.txt agent in lowercase, the data commit author, and the report sender's name.",
+      "pattern": "^[A-Za-z][A-Za-z0-9]*$"
+    },
+    "domain": { "type": "string", "description": "The site's domain, such as weekendboise.com. Reports are sent from reports@ this domain.", "pattern": "^[a-z0-9.-]+\\.[a-z]+$" },
+    "repo": { "type": "string", "description": "The city repo on GitHub, owner/name. Used in the User-Agent contact URL, issue links, and report links.", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
+    "cityName": { "type": "string", "description": "The main city, as in \"midnight Boise time\".", "minLength": 1 },
+    "timeZone": { "type": "string", "description": "IANA time zone, such as America/Boise. Every event time is written in it.", "minLength": 1 },
+    "state": {
+      "type": "object",
+      "description": "The state events must be in. Adapters that filter by state keep only this one, and addresses are read with it.",
+      "required": ["code", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Z]{2}$" },
+        "name": { "type": "string", "minLength": 1 }
+      }
+    },
+    "cities": {
+      "type": "array",
+      "description": "The cities an event can be in, in schema order. Other is added by the engine.",
+      "items": { "type": "string", "minLength": 1, "not": { "const": "Other" } },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "cityAliases": {
+      "type": "object",
+      "description": "Place names that count as one of the cities, such as McCall for Valley County or Gunbarrel for Boulder.",
+      "additionalProperties": { "type": "string" }
+    },
+    "ambiguousCities": {
+      "type": "array",
+      "description": "Cities whose names are also everyday words or surnames. They count only from a ZIP code or a \"City, ST\" pattern.",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "zipCodes": {
+      "type": "object",
+      "description": "ZIP code to city.",
+      "propertyNames": { "pattern": "^\\d{5}$" },
+      "additionalProperties": { "type": "string" }
+    },
+    "zipRanges": {
+      "type": "array",
+      "description": "ZIP ranges for one city, applied after zipCodes to any ZIP in the range that zipCodes does not list.",
+      "items": {
+        "type": "object",
+        "required": ["from", "to", "city"],
+        "additionalProperties": false,
+        "properties": {
+          "from": { "type": "string", "pattern": "^\\d{5}$" },
+          "to": { "type": "string", "pattern": "^\\d{5}$" },
+          "city": { "type": "string" }
+        }
+      }
+    },
+    "titleAbbreviations": {
+      "type": "object",
+      "description": "Short forms expanded before titles are compared for duplicates, such as bsu to boise state university. Lowercase.",
+      "additionalProperties": { "type": "string" }
+    },
+    "searchAliases": {
+      "type": "object",
+      "description": "Search words that also match their long forms on the site, such as bsu to boise state. Lowercase.",
+      "additionalProperties": { "type": "array", "items": { "type": "string" } }
+    },
+    "cityListLast": {
+      "type": "array",
+      "description": "Cities pinned after Other at the end of the site's City list.",
+      "items": { "type": "string" }
+    },
+    "coordinates": {
+      "type": "object",
+      "description": "Where the site's sky theme follows sunrise and sunset.",
+      "required": ["lat", "lon"],
+      "additionalProperties": false,
+      "properties": {
+        "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+        "lon": { "type": "number", "minimum": -180, "maximum": 180 }
+      }
+    },
+    "description": { "type": "string", "description": "The site's default meta description.", "minLength": 1 },
+    "logDatabase": { "type": "string", "description": "The Cloudflare D1 database holding the visitor log, as in wrangler.jsonc.", "minLength": 1 },
+    "about": {
+      "type": "object",
+      "description": "City text on the About page. HTML is allowed.",
+      "required": ["intro", "story"],
+      "additionalProperties": false,
+      "properties": {
+        "intro": { "type": "string", "description": "What the site lists and where." },
+        "story": { "type": "string", "description": "Who built it and why." },
+        "cityNote": { "type": "string", "description": "Extra sentence for the City column, such as how a county is grouped." }
+      }
+    }
+  }
+}

@@ -6,20 +6,20 @@
   Checks data/events.json and data/archive/*.json against the event schema.
   Then checks that every category, tag, and source referenced by an event exists. Sources are
   validated by Test-Sources.ps1. Exits non-zero on any failure.
-.PARAMETER Root
-  Ingestion root (holds schema/ and sources.json). Defaults to the parent of this script's folder.
-.PARAMETER DataRoot
-  Repo root (holds data/). Defaults to the parent of Root.
+  Categories and tags are the engine's vocabulary with the city's additions.
+.PARAMETER CityRoot
+  The city repo (holds city.json, ingestion/sources.json, and data/). Defaults to
+  $env:WEEKEND_CITY_ROOT, else the nearest folder at or above the current directory with a city.json.
 #>
 [CmdletBinding()]
 param(
-  [string]$Root = (Join-Path $PSScriptRoot '..'),
-  [string]$DataRoot = (Join-Path $PSScriptRoot '..' '..')
+  [string]$CityRoot
 )
 
 . (Join-Path $PSScriptRoot 'lib' 'Http.ps1')
 
-$eventSchema = Join-Path $Root 'schema' 'event.schema.json'
+$DataRoot = Set-WkCityRoot $CityRoot
+$eventSchema = Get-WkSchemaText event
 $failures = [System.Collections.Generic.List[string]]::new()
 
 function Read-JsonFile {
@@ -27,11 +27,11 @@ function Read-JsonFile {
   ConvertFrom-WkJson (Get-Content -LiteralPath $Path -Raw)
 }
 
-$categoryIds = @((Read-JsonFile (Join-Path $DataRoot 'data' 'schema' 'categories.json')).id)
-$tagIds = @((Read-JsonFile (Join-Path $DataRoot 'data' 'schema' 'tags.json')).id)
+$categoryIds = @((Get-WkVocabulary categories).id)
+$tagIds = @((Get-WkVocabulary tags).id)
 
 # Events can only come from configured entries, the ones with a name.
-$sourceNames = @((Read-JsonFile (Join-Path $Root 'sources.json')).sources | Where-Object name | ForEach-Object name)
+$sourceNames = @((Read-JsonFile (Join-Path $DataRoot 'ingestion' 'sources.json')).sources | Where-Object name | ForEach-Object name)
 
 $files = @(Join-Path $DataRoot 'data' 'events.json')
 $archive = Join-Path $DataRoot 'data' 'archive'
@@ -46,7 +46,7 @@ foreach ($file in ($files | Where-Object { Test-Path -LiteralPath $_ })) {
 
   foreach ($event in $events) {
     $json = $event | ConvertTo-Json -Depth 6
-    if (-not ($json | Test-Json -SchemaFile $eventSchema -ErrorAction SilentlyContinue)) {
+    if (-not ($json | Test-Json -Schema $eventSchema -ErrorAction SilentlyContinue)) {
       $failures.Add("$label`: $($event.id) does not match schema/event.schema.json")
     }
     if ($event.category -notin $categoryIds) {

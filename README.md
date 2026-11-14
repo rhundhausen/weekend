@@ -31,5 +31,14 @@ reusable workflows, so their schedules cannot fire from this repo.
 Invoke-Pester -Path ./ingestion/tests
 ```
 
-Tests that need city files (`sources.json`, `data/schema/`) fail here until those dependencies are
-replaced with fixtures.
+The tests run against a fixture city in `ingestion/tests/fixtures/city` (a copy of WeekendBoise's
+`city.json`, the source entries the tests read, and its lookup tables), so they need no city repo.
+Every test file loads `ingestion/tests/TestCity.ps1` first, which points `WEEKEND_CITY_ROOT` there.
+
+## How scripts find the city
+
+Every script takes `-CityRoot`. Without it, the city is `$env:WEEKEND_CITY_ROOT`, or else the
+nearest folder at or above the current directory that holds a `city.json`. City facts come from
+`city.json` (format: `ingestion/schema/city.schema.json`); the engine's vocabulary
+(`ingestion/vocabulary`: categories, tags, title case) is merged with any additions in the city's
+`data/schema/` files of the same names.

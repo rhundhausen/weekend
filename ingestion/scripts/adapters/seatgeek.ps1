@@ -3,7 +3,7 @@
 .SYNOPSIS
   Reads upcoming events near a point from the SeatGeek API.
 .DESCRIPTION
-  Only Idaho venues are kept. Ticket prices in the response are ignored. Requires the
+  Only venues in the city's state are kept. Ticket prices in the response are ignored. Requires the
   SEATGEEK_CLIENT_ID environment variable.
 
   Not yet run against the live API. Field names follow SeatGeek's platform documentation.
@@ -55,7 +55,7 @@ function Get-SeatGeekPage {
 $pages = if ($Response) { $Response | ForEach-Object { ConvertFrom-WkJson $_ } } else { Get-SeatGeekPage }
 
 foreach ($item in ($pages | ForEach-Object { $_.events } | Where-Object { $_ })) {
-  if ($item.venue.state -ne 'ID') { continue }
+  if ($item.venue.state -ne (Get-WkCity).state.code) { continue }
 
   try {
     # When the time is unknown, SeatGeek sends a placeholder of 3:30 AM on the right date.

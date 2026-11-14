@@ -5,7 +5,7 @@
 .DESCRIPTION
   Eventbrite's API dropped location search in 2019, but its browse pages carry their events as
   JSON in window.__SERVER_DATA__ (buckets[].events[]), with start and end in the event's zone.
-  Online events and events with no address, or an address outside Idaho, are skipped.
+  Online events and events with no address, or an address outside the city's state, are skipped.
 
   The listing has no prices, so each kept event's own page is read for its schema.org offers,
   which set the cost tier. A failed event page keeps the event without a cost. Every request is
@@ -90,14 +90,14 @@ $kept = @(foreach ($item in @($data.buckets | ForEach-Object { $_.events } | Whe
     if (-not $seen.Add("$($item.id)")) { continue }
     if ($item.is_online_event -or $item.is_cancelled) { continue }
     $address = $item.primary_venue.address
-    if (-not $address -or -not $address.city -or "$($address.region)" -ne 'ID') { continue }
+    if (-not $address -or -not $address.city -or "$($address.region)" -ne (Get-WkCity).state.code) { continue }
     $item
   })
 
 for ($n = 0; $n -lt $kept.Count; $n++) {
   $item = $kept[$n]
   try {
-    $zone = if ($item.timezone) { $item.timezone } else { 'America/Boise' }
+    $zone = if ($item.timezone) { $item.timezone } else { (Get-WkTimeZone).Id }
     $allDay = -not $item.start_time
     $start = if ($allDay) { $item.start_date } else { ConvertTo-LocalTime "$($item.start_date) $($item.start_time)" $zone }
     $end = if ($allDay) {

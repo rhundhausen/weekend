@@ -20,7 +20,7 @@ function Find-WkAddressCity {
   .SYNOPSIS
     The one city a page's addresses name, or $null.
   .DESCRIPTION
-    Counts "City, ID" and "City, Idaho" for the schema's cities, Idaho ZIP codes after the state,
+    Counts "City, ST" and "City, State" for the city's cities, ZIP codes after the state,
     and the addressLocality of schema.org Event locations. A bare city name in prose doesn't
     count. A page that names two or more cities gives $null, because it can't say which.
   #>
@@ -38,16 +38,18 @@ function Find-WkAddressCity {
     }
   }
 
-  # Menus and page headers name other cities ("Guide to Moving to Boise, ID" in Boise Mom's menu),
+  # Menus and page headers name other cities ("Guide to Moving to Boise, ID" in a local blog's menu),
   # not the event's, so they are left out. Footers stay: an organizer's own address is often there.
   $text = $Html -replace '(?is)<(script|style|nav|header)\b[^>]*>.*?</\1>', ' ' -replace '<[^>]+>', ' '
   $text = [Net.WebUtility]::HtmlDecode($text) -replace '\s+', ' '
   $names = (Get-WkCityNames | ForEach-Object { [regex]::Escape($_) }) -join '|'
-  foreach ($match in [regex]::Matches($text, "(?i)\b($names)\s*,?\s+(ID|Idaho)\b")) {
+  $state = Get-WkStatePattern
+  foreach ($match in [regex]::Matches($text, "(?i)\b($names)\s*,?\s+($state)\b")) {
     $null = $found.Add((Get-WkCityNames | Where-Object { $_ -eq $match.Groups[1].Value } | Select-Object -First 1))
   }
-  foreach ($match in [regex]::Matches($text, '\b(?:ID|Idaho)\s+(83\d{3})\b')) {
-    $city = $script:WkZipCities[$match.Groups[1].Value]
+  $zips = Get-WkZipCities
+  foreach ($match in [regex]::Matches($text, "\b(?:$state)\s+(\d{5})\b")) {
+    $city = $zips[$match.Groups[1].Value]
     if ($city) { $null = $found.Add($city) }
   }
 

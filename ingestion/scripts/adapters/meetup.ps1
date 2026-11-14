@@ -31,7 +31,8 @@ param(
   [Parameter(Mandatory)][pscustomobject]$Source,
   [Parameter(Mandatory)][string]$FetchedAt,
   [string[]]$Response,
-  [string]$RawPath = (Join-Path $PSScriptRoot '..' '..' '..' 'data' 'raw-events.json')
+  # Defaults to data/raw-events.json in the city repo.
+  [string]$RawPath
 )
 
 . "$PSScriptRoot/../lib/Schema.ps1"
@@ -39,6 +40,8 @@ param(
 . "$PSScriptRoot/../lib/Ics.ps1"
 . "$PSScriptRoot/../lib/Scrape.ps1"
 . "$PSScriptRoot/../lib/Raw.ps1"
+
+if (-not $RawPath) { $RawPath = Get-WkCityPath 'data' 'raw-events.json' }
 
 $responseIndex = 0
 

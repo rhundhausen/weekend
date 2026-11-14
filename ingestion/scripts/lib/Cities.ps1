@@ -2,53 +2,38 @@
 
 . "$PSScriptRoot/Schema.ps1"
 
-# Idaho ZIP codes for the cities in the schema. 83714 is mostly Garden City.
-$script:WkZipCities = @{
-  '83605' = 'Caldwell'; '83607' = 'Caldwell'
-  '83616' = 'Eagle'
-  '83617' = 'Emmett'
-  '83634' = 'Kuna'
-  '83639' = 'Marsing'
-  '83642' = 'Meridian'; '83646' = 'Meridian'; '83680' = 'Meridian'
-  '83644' = 'Middleton'
-  '83647' = 'Mountain Home'; '83648' = 'Mountain Home'
-  '83651' = 'Nampa'; '83653' = 'Nampa'; '83686' = 'Nampa'; '83687' = 'Nampa'
-  '83661' = 'Payette'
-  '83669' = 'Star'
-  '83672' = 'Weiser'
-  '83714' = 'Garden City'
-  # Valley County is one location for all its towns: McCall, Cascade, Donnelly, Lake Fork, and
-  # Yellow Pine. New Meadows (83654, Adams County) and Riggins (83549, Idaho County) are outside
-  # Valley County but are grouped with it on purpose.
-  '83638' = 'Valley County'; '83611' = 'Valley County'; '83615' = 'Valley County'
-  '83635' = 'Valley County'; '83677' = 'Valley County'
-  '83654' = 'Valley County'; '83549' = 'Valley County'
-}
-foreach ($zip in 83701..83799) {
-  if (-not $script:WkZipCities.ContainsKey("$zip")) { $script:WkZipCities["$zip"] = 'Boise' }
+function Get-WkZipCities {
+  # ZIP code to city, from city.json: zipCodes, then zipRanges for ZIPs zipCodes does not list.
+  Get-WkCityCached 'zipCities' {
+    $city = Get-WkCity
+    $map = @{}
+    foreach ($zip in $city.zipCodes.Keys) { $map[$zip] = $city.zipCodes[$zip] }
+    foreach ($range in $city.zipRanges) {
+      foreach ($zip in ([int]$range.from)..([int]$range.to)) {
+        $key = '{0:D5}' -f $zip
+        if (-not $map.ContainsKey($key)) { $map[$key] = $range.city }
+      }
+    }
+    $map
+  }
 }
 
-# Cities whose names are also everyday words or surnames ("star", "Emmett Till", "Payette River").
-# These are trusted only from a ZIP code or a "City, ID" pattern, never from a bare word.
-$script:WkAmbiguousCities = @('Star', 'Payette', 'Emmett', 'Middleton', 'Weiser')
+function Get-WkAmbiguousCities {
+  # Cities whose names are also everyday words or surnames ("star", "Emmett Till"), from city.json.
+  # These are trusted only from a ZIP code or a "City, ST" pattern, never from a bare word.
+  @((Get-WkCity).ambiguousCities)
+}
 
 function Get-WkCityNames {
-  # Every city in the event schema except Other, longest first so "Garden City" wins over shorter names.
-  $schema = Join-Path $PSScriptRoot '..' '..' 'schema' 'event.schema.json'
-  if (-not $script:WkCityNames) {
-    $enum = (Get-Content -LiteralPath $schema -Raw | ConvertFrom-Json).properties.city.enum
-    $script:WkCityNames = @($enum | Where-Object { $_ -ne 'Other' } | Sort-Object Length -Descending)
-  }
-  $script:WkCityNames
+  # Every city in city.json, longest first so "Garden City" wins over shorter names.
+  Get-WkCityCached 'cityNames' { @((Get-WkCity).cities | Sort-Object Length -Descending) }
 }
 
 function Get-WkPlaceCities {
-  # data/schema/place-cities.json, loaded once.
-  if (-not $script:WkPlaceCities) {
-    $path = Join-Path $PSScriptRoot '..' '..' '..' 'data' 'schema' 'place-cities.json'
-    $script:WkPlaceCities = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -AsHashtable
+  # data/schema/place-cities.json in the city repo, loaded once.
+  Get-WkCityCached 'placeCities' {
+    Get-Content -LiteralPath (Get-WkCityPath 'data' 'schema' 'place-cities.json') -Raw | ConvertFrom-Json -AsHashtable
   }
-  $script:WkPlaceCities
 }
 
 function Remove-WkNonPlace {
@@ -73,7 +58,7 @@ function Find-WkPlace {
 }
 
 function Find-WkCityWord {
-  # Distinct cities named as whole words in the text, optionally only when followed by ", ID" or ", Idaho".
+  # Distinct cities named as whole words in the text, optionally only when followed by the state (", ID" or ", Idaho").
   [CmdletBinding()]
   param(
     [AllowEmptyString()][string]$Text,
@@ -84,9 +69,11 @@ function Find-WkCityWord {
 
   if (-not $Text) { return @() }
   $found = [Collections.Generic.List[string]]::new()
+  $ambiguous = Get-WkAmbiguousCities
+  $state = Get-WkStatePattern
   foreach ($city in (Get-WkCityNames)) {
-    if ($Unambiguous -and $city -in $script:WkAmbiguousCities) { continue }
-    $pattern = '(?i)' + $Before + '\b' + [regex]::Escape($city) + '\b' + ($WithState ? ',?\s+(ID|Idaho)\b' : '(?!\w)')
+    if ($Unambiguous -and $city -in $ambiguous) { continue }
+    $pattern = '(?i)' + $Before + '\b' + [regex]::Escape($city) + '\b' + ($WithState ? ",?\s+($state)\b" : '(?!\w)')
     if ($Text -match $pattern -and -not $found.Contains($city)) { $found.Add($city) }
   }
   $found.ToArray()
@@ -98,8 +85,8 @@ function Get-WkCityClue {
     Infers an event's city from its venue, title, and description, or returns $null.
   .DESCRIPTION
     Tries clues from strongest to weakest and stops at the first that names cities:
-    1. an Idaho ZIP code in the venue or description
-    2. "City, ID" or "City, Idaho" anywhere, or "(City)" in the title
+    1. a ZIP code from city.json in the venue or description
+    2. "City, ST" or "City, State" anywhere ("Boise, ID"), or "(City)" in the title
     3. a city name in the venue
     4. a known place from data/schema/place-cities.json, such as the Basque Block
     5. the venue's city, when other events place that venueKey in one city
@@ -107,7 +94,7 @@ function Get-WkCityClue {
     7. a city name in the title
     8. a city name in the description
     A clue that names more than one city is ambiguous and ends the search with no answer.
-    Star, Payette, Emmett, Middleton, and Weiser count only from clues 1 and 2. Names in the
+    The city's ambiguousCities (such as Star) count only from clues 1 and 2. Names in the
     ignore list there, such as Boise Cascade, are not read as a city.
   #>
   [CmdletBinding()]
@@ -123,7 +110,7 @@ function Get-WkCityClue {
 
   # Each step runs only if the ones before it found nothing.
   $steps = @(
-    { @([regex]::Matches("$venue`n$description", '\b83[567]\d\d\b') | ForEach-Object { $script:WkZipCities[$_.Value] }) }
+    { $zips = Get-WkZipCities; @([regex]::Matches("$venue`n$description", '\b\d{5}\b') | ForEach-Object { $zips[$_.Value] }) }
     { @(Find-WkCityWord $all -WithState) + @(Find-WkCityWord $title -Before '\(\s*' | Where-Object { $title -match ('(?i)\(\s*' + [regex]::Escape($_) + '\s*\)') }) }
     { Find-WkCityWord $venue -Unambiguous }
     { Find-WkPlace $all }

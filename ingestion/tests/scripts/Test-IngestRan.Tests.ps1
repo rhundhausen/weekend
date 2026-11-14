@@ -1,4 +1,5 @@
 BeforeAll {
+  . "$PSScriptRoot/../TestCity.ps1"
   $script:gate = Join-Path $PSScriptRoot '..' '..' 'scripts' 'Test-IngestRan.ps1'
 
   function New-Job([string]$Name, [string]$Conclusion) {

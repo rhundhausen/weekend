@@ -1,4 +1,5 @@
 BeforeAll {
+  . "$PSScriptRoot/../TestCity.ps1"
   $script:refine = Join-Path $PSScriptRoot '..' '..' 'scripts' 'Invoke-Refine.ps1'
   . "$PSScriptRoot/../../scripts/lib/Raw.ps1"
   . "$PSScriptRoot/../../scripts/lib/Links.ps1"

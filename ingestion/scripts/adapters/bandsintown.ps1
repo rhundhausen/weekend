@@ -3,7 +3,7 @@
 .SYNOPSIS
   Reads events for one artist from the Bandsintown API.
 .DESCRIPTION
-  The events endpoint is keyed by artist, so only Idaho dates are kept. Requires the
+  The events endpoint is keyed by artist, so only dates in the city's state are kept. Requires the
   BANDSINTOWN_APP_ID environment variable, which must be an id Bandsintown has approved.
 .PARAMETER Source
   One entry from sources.json, with artistOrVenue.
@@ -33,7 +33,7 @@ function Get-BandsintownEvent {
 $items = if ($Response) { ConvertFrom-WkJson $Response[0] } else { Get-BandsintownEvent }
 
 foreach ($item in ($items | Where-Object { $_ })) {
-  if ($item.venue.region -ne 'ID') { continue }
+  if ($item.venue.region -ne (Get-WkCity).state.code) { continue }
 
   try {
     $venue = ConvertTo-PlainText $item.venue.name

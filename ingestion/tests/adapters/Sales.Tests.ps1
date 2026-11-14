@@ -1,4 +1,5 @@
 BeforeAll {
+  . "$PSScriptRoot/../TestCity.ps1"
   $script:adapter = Join-Path $PSScriptRoot '..' '..' 'scripts' 'adapters' 'sales.ps1'
   $script:fetchedAt = '2026-11-09T07:00:00Z'
 

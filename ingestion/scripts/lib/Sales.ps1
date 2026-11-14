@@ -31,10 +31,10 @@ function Get-WkSaleVerdict {
 }
 
 function Find-WkSaleTown {
-  # The first "Town, ID" (or "Town, Idaho") in the text, as written, or $null.
+  # The first "Town, ST" (or "Town, State") in the text, as written, or $null.
   param([AllowEmptyString()][string]$Text)
 
-  $match = [regex]::Match("$Text", '(?m)(?:^|,)\s*(?<town>[A-Z][A-Za-z.'' ]{1,30}?),\s*(?:ID|Idaho)\b')
+  $match = [regex]::Match("$Text", "(?m)(?:^|,)\s*(?<town>[A-Z][A-Za-z.' ]{1,30}?),\s*(?:$(Get-WkStatePattern))\b")
   if ($match.Success) { $match.Groups['town'].Value.Trim() } else { $null }
 }
 
@@ -65,7 +65,7 @@ function Get-WkNextDate {
 }
 
 function ConvertTo-WkSaleTime {
-  # A date (yyyy-MM-dd) and a clock time such as "2 pm" or "9:00 AM", as an event start in Boise time.
+  # A date (yyyy-MM-dd) and a clock time such as "2 pm" or "9:00 AM", as an event start in the city's time.
   param([string]$Date, [string]$Clock)
 
   $match = [regex]::Match($Clock, '(?i)^\s*(?<h>\d{1,2})(?::(?<m>\d{2}))?\s*(?<ap>[ap])\.?\s*m\.?\s*$')

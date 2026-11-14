@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/rhundhausen/weekendboise/blob/main/ingestion/schema/sources.schema.json",
-  "title": "WeekendBoise sources",
+  "$id": "https://github.com/rhundhausen/weekend/blob/main/ingestion/schema/sources.schema.json",
+  "title": "Weekend sources",
   "description": "Every source: running, configured but waiting, ideas, and sites ruled out. Only displayName is required. An entry with a name is a configured source and needs its full adapter configuration. Ingest runs only status running. Per-adapter fields are documented in docs/sources.md.",
   "type": "object",
   "required": [
@@ -166,25 +166,8 @@
         },
         "city": {
           "type": "string",
-          "description": "Fallback for events that do not report a city.",
-          "enum": [
-            "Boise",
-            "Meridian",
-            "Nampa",
-            "Caldwell",
-            "Eagle",
-            "Garden City",
-            "Kuna",
-            "Star",
-            "Emmett",
-            "Marsing",
-            "Middleton",
-            "Mountain Home",
-            "Payette",
-            "Weiser",
-            "Valley County",
-            "Other"
-          ]
+          "description": "Fallback for events that do not report a city. The enum lists only Other here; the engine adds the city's cities from city.json when it validates.",
+          "enum": ["Other"]
         },
         "venue": {
           "type": "string",
@@ -222,7 +205,7 @@
         },
         "venuePrefix": {
           "type": "string",
-          "description": "rss: put in front of each item's ev:location to make the venue name, so \"Arena\" becomes \"Ford Idaho Center Arena\".",
+          "description": "rss: put in front of each item's ev:location to make the venue name, so \"Arena\" becomes \"Example Center Arena\".",
           "minLength": 1
         },
         "scrapeMode": {
@@ -264,7 +247,7 @@
         },
         "datePattern": {
           "type": "string",
-          "description": "scrape, cards: regex with named groups month and day, matched inside a card. Month is a name unless the regex also has a year group, in which case month is a number and no year is guessed. Defaults to Boise Centre markup (class=\"month\" and class=\"day\").",
+          "description": "scrape, cards: regex with named groups month and day, matched inside a card. Month is a name unless the regex also has a year group, in which case month is a number and no year is guessed. Defaults to the common month/day card markup (class=\"month\" and class=\"day\").",
           "minLength": 1
         },
         "titlePattern": {

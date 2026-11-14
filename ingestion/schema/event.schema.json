@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/rhundhausen/weekendboise/blob/main/ingestion/schema/event.schema.json",
-  "title": "WeekendBoise event",
-  "description": "A single normalized Treasure Valley event.",
+  "$id": "https://github.com/rhundhausen/weekend/blob/main/ingestion/schema/event.schema.json",
+  "title": "Weekend event",
+  "description": "A single normalized event. The city enum lists only Other here; the engine adds the city's cities from city.json when it validates.",
   "type": "object",
   "required": ["id", "title", "start", "venue", "venueKey", "category", "url"],
   "additionalProperties": false,
@@ -40,7 +40,7 @@
     },
     "city": {
       "type": "string",
-      "enum": ["Boise", "Meridian", "Nampa", "Caldwell", "Eagle", "Garden City", "Kuna", "Star", "Emmett", "Marsing", "Middleton", "Mountain Home", "Payette", "Weiser", "Valley County", "Other"]
+      "enum": ["Other"]
     },
     "category": {
       "type": "string",

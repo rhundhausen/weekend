@@ -1,13 +1,15 @@
 BeforeAll {
+  . "$PSScriptRoot/../TestCity.ps1"
   . "$PSScriptRoot/../../scripts/lib/Schema.ps1"
 
   $root = Join-Path $PSScriptRoot '..' '..'
   $repoRoot = Join-Path $PSScriptRoot '..' '..' '..'
-  $script:categories = @(Get-Content (Join-Path $repoRoot 'data/schema/categories.json') -Raw | ConvertFrom-Json)
-  $script:tags = @(Get-Content (Join-Path $repoRoot 'data/schema/tags.json') -Raw | ConvertFrom-Json)
+  # The engine's vocabulary with the fixture city's additions, as the scripts see it.
+  $script:categories = @(Get-WkVocabulary categories | ForEach-Object { [pscustomobject]$_ })
+  $script:tags = @(Get-WkVocabulary tags | ForEach-Object { [pscustomobject]$_ })
   $script:eventSchema = Get-Content (Join-Path $root 'schema/event.schema.json') -Raw | ConvertFrom-Json
   $script:sourceSchema = Get-Content (Join-Path $root 'schema/sources.schema.json') -Raw | ConvertFrom-Json
-  $script:sources = (Get-Content (Join-Path $root 'sources.json') -Raw | ConvertFrom-Json).sources
+  $script:sources = (Get-Content (Join-Path $FixtureCity 'ingestion' 'sources.json') -Raw | ConvertFrom-Json).sources
 }
 
 Describe 'categories.json' {
@@ -156,7 +158,7 @@ Describe 'Get-WkClassification' {
 
 Describe 'sizes.json' {
   BeforeAll {
-    $sizes = Get-Content (Join-Path $PSScriptRoot '..' '..' '..' 'data/schema/sizes.json') -Raw | ConvertFrom-Json -AsHashtable
+    $sizes = Get-Content (Join-Path $FixtureCity 'data/schema/sizes.json') -Raw | ConvertFrom-Json -AsHashtable
   }
 
   It 'matches the enum in the schema' {
@@ -207,8 +209,8 @@ Describe 'Get-WkEventSize' {
 
 Describe 'venue aliases' {
   BeforeAll {
-    $aliases = (Get-Content (Join-Path $PSScriptRoot '..' '..' '..' 'data/schema/venue-aliases.json') -Raw | ConvertFrom-Json -AsHashtable).aliases
-    $sizes = Get-Content (Join-Path $PSScriptRoot '..' '..' '..' 'data/schema/sizes.json') -Raw | ConvertFrom-Json -AsHashtable
+    $aliases = (Get-Content (Join-Path $FixtureCity 'data/schema/venue-aliases.json') -Raw | ConvertFrom-Json -AsHashtable).aliases
+    $sizes = Get-Content (Join-Path $FixtureCity 'data/schema/sizes.json') -Raw | ConvertFrom-Json -AsHashtable
     function New-AtVenue {
       param([string]$Venue)
       New-WkEvent -Title 'Show' -Start '2026-11-14T19:30:00-07:00' -Venue $Venue -Category 'music' -Url 'https://x.test/e'

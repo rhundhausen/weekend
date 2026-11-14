@@ -1,7 +1,8 @@
 BeforeAll {
+  . "$PSScriptRoot/../TestCity.ps1"
   $script:repo = Join-Path $PSScriptRoot '..' '..'
   $script:adapter = Join-Path $repo 'scripts' 'adapters' 'eventbrite-search.ps1'
-  $script:source = (Get-Content (Join-Path $repo 'sources.json') -Raw | ConvertFrom-Json).sources | Where-Object name -eq 'eventbrite-emmett'
+  $script:source = (Get-Content (Join-Path $FixtureCity 'ingestion' 'sources.json') -Raw | ConvertFrom-Json).sources | Where-Object name -eq 'eventbrite-emmett'
   $script:fetchedAt = '2026-11-06T04:00:00Z'
 
   function Get-Fixture {

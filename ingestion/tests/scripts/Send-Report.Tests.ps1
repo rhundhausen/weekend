@@ -1,4 +1,5 @@
 BeforeAll {
+  . "$PSScriptRoot/../TestCity.ps1"
   $script:send = Join-Path $PSScriptRoot '..' '..' 'scripts' 'Send-Report.ps1'
   $script:sourcesPath = Join-Path $TestDrive 'sources.json'
   @{ sources = @(@{ name = 'alpha'; displayName = 'Alpha Hall'; status = 'running'; adapter = 'ics'; url = 'https://alpha.test/cal.ics' }) } |

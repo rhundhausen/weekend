@@ -1,4 +1,5 @@
 BeforeAll {
+  . "$PSScriptRoot/../TestCity.ps1"
   $script:repo = Join-Path $PSScriptRoot '..' '..'
   $script:adapter = Join-Path $repo 'scripts' 'adapters' 'meetup.ps1'
   $script:fetchedAt = '2026-11-06T10:00:00Z'

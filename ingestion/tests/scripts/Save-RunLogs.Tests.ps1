@@ -1,4 +1,5 @@
 BeforeAll {
+  . "$PSScriptRoot/../TestCity.ps1"
   $script:save = Join-Path $PSScriptRoot '..' '..' 'scripts' 'Save-RunLogs.ps1'
 
   # Answers like the GitHub API: the run's jobs, then each job's log text. A URL it doesn't know throws.

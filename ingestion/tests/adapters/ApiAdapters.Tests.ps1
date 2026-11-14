@@ -3,6 +3,7 @@
 # adapters match those shapes, not that the live APIs do.
 
 BeforeAll {
+  . "$PSScriptRoot/../TestCity.ps1"
   $script:repo = Join-Path $PSScriptRoot '..' '..'
   $script:fetchedAt = '2026-11-02T10:00:00Z'
 
@@ -268,7 +269,7 @@ Describe 'googlecalendar adapter' {
       $first | Should -BeLike 'https://www.googleapis.com/calendar/v3/calendars/examplelibrary%40gmail.com/events?*'
       $first | Should -Match 'singleEvents=true'
       $first | Should -Match 'orderBy=startTime'
-      $first | Should -Match 'timeZone=America%2FDenver'
+      $first | Should -Match 'timeZone=America%2FBoise'
       $first | Should -Match 'key=SECRET'
       $query = [System.Web.HttpUtility]::ParseQueryString(([uri]$first).Query)
       $from = [DateTimeOffset]::Parse($query['timeMin'], [Globalization.CultureInfo]::InvariantCulture)

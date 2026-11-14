@@ -1,6 +1,7 @@
 BeforeAll {
+  . "$PSScriptRoot/../TestCity.ps1"
   $script:repo = Join-Path $PSScriptRoot '..' '..'
-  $script:sources = (Get-Content (Join-Path $repo 'sources.json') -Raw | ConvertFrom-Json).sources
+  $script:sources = (Get-Content (Join-Path $FixtureCity 'ingestion' 'sources.json') -Raw | ConvertFrom-Json).sources
   $script:fetchedAt = '2026-11-02T10:00:00Z'
 
   . (Join-Path $repo 'scripts' 'lib' 'Schema.ps1')

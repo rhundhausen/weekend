@@ -1,0 +1,19 @@
+{
+  "keepUpper": [
+    "BSU",
+    "BYU",
+    "CWI",
+    "ICYC",
+    "ID",
+    "IPT",
+    "ISU",
+    "KTVB",
+    "NNU",
+    "SDSU",
+    "UI"
+  ],
+  "forms": {
+    "MCCALL": "McCall"
+  },
+  "smallWords": []
+}
