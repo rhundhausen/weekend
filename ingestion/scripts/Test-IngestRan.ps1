@@ -5,7 +5,8 @@
 .DESCRIPTION
   Refine starts on workflow_run each time an ingest run completes. Ingest schedules two cron lines
   for daylight saving and skips the one that isn't midnight in the city, and that run still completes,
-  so refine looks at the ingest run's jobs: it runs if the job named ingest started, whatever its
+  so refine looks at the ingest run's jobs: it runs if the job named ingest started (named
+  "<caller job> / ingest" when a city's workflow calls the engine's reusable one), whatever its
   outcome (success, failure, cancelled, timed out), and skips it if that job was skipped or never
   reached. A failed ingest still gets a refine, so past events move to the archive and links are
   checked against the last good raw file. A manual run (any event other than workflow_run) always
@@ -41,7 +42,7 @@ if ($EventName -eq 'workflow_run') {
     if ($LASTEXITCODE -ne 0) { throw "Can't read the jobs of ingest run $RunId" }
     $Jobs = @(($json | Out-String | ConvertFrom-Json).jobs)
   }
-  $ingest = @($Jobs | Where-Object name -eq 'ingest') | Select-Object -First 1
+  $ingest = @($Jobs | Where-Object { $_.name -eq 'ingest' -or $_.name -like '* / ingest' }) | Select-Object -First 1
   $conclusion = if ($ingest) { "$($ingest.conclusion)" } else { 'missing' }
   $run = $ingest -and $conclusion -ne 'skipped'
   Write-Host "Ingest run $RunId, ingest job: $conclusion; refine: $($run.ToString().ToLowerInvariant())"

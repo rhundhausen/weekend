@@ -1,23 +1,22 @@
-# Nightly refine, stage 2 of 2. Reads the committed data/raw-events.json, merges and cleans it,
-# checks event links, and commits the files the site reads, which deploys the site. Starts when an
-# ingest run finishes, whether it succeeded or not, or by hand as often as needed. It never fetches
-# a source.
+# Nightly refine, stage 2 of 2, as a reusable workflow. A city repo's own refine.yml holds only the
+# triggers (each completed ingest run, a pushed raw file, or by hand) and calls this:
+#
+#   jobs:
+#     nightly:
+#       uses: rhundhausen/weekend/.github/workflows/refine.yml@main
+#       with:
+#         skip_link_check: ${{ inputs.skip_link_check || false }}
+#         skip_city_lookup: ${{ inputs.skip_city_lookup || false }}
+#       secrets: inherit
+#
+# It reads the city's committed data/raw-events.json, merges and cleans it, checks event links, and
+# commits the files the site reads, which deploys the site. It never fetches a source. The github
+# context here is the caller's, and the engine is checked out into .engine/ beside the city's files.
 
 name: refine
 
 on:
-  # Every completed ingest run on main, scheduled or manual. The when job skips the runs whose
-  # ingest job never started (the cron line that isn't midnight in Boise).
-  workflow_run:
-    workflows: [ingest]
-    types: [completed]
-    branches: [main]
-  # A raw file pushed from a PC by Invoke-LocalIngest.ps1. The nightly ingest's own push never
-  # starts this, because pushes made with a workflow's GITHUB_TOKEN start no workflows.
-  push:
-    branches: [main]
-    paths: [data/raw-events.json]
-  workflow_dispatch:
+  workflow_call:
     inputs:
       skip_link_check:
         description: Skip the link check (known link results still apply).
@@ -35,11 +34,6 @@ permissions:
   # To read the ingest run's jobs in the when job.
   actions: read
 
-# Shared with ingest, so the two never run at once. A manual refine waits for a running ingest.
-concurrency:
-  group: data
-  cancel-in-progress: false
-
 defaults:
   run:
     shell: pwsh
@@ -51,9 +45,12 @@ jobs:
     outputs:
       run: ${{ steps.check.outputs.run }}
     steps:
-      - name: Check out
+      - name: Check out the engine
         uses: actions/checkout@v5
         with:
+          repository: rhundhausen/weekend
+          ref: main
+          path: .engine
           fetch-depth: 1
           sparse-checkout: ingestion/scripts/Test-IngestRan.ps1
           sparse-checkout-cone-mode: false
@@ -66,7 +63,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           INGEST_RUN_ID: ${{ github.event.workflow_run.id }}
           GH_TOKEN: ${{ github.token }}
-        run: ./ingestion/scripts/Test-IngestRan.ps1
+        run: ./.engine/ingestion/scripts/Test-IngestRan.ps1
 
   refine:
     needs: when
@@ -76,14 +73,22 @@ jobs:
     # under a minute.
     timeout-minutes: 30
     steps:
-      # The head of main, so it reads the raw file ingest just committed.
-      - name: Check out
+      # The head of the branch, so it reads the raw file ingest just committed.
+      - name: Check out the city
         uses: actions/checkout@v5
         with:
           fetch-depth: 1
 
+      - name: Check out the engine
+        uses: actions/checkout@v5
+        with:
+          repository: rhundhausen/weekend
+          ref: main
+          path: .engine
+          fetch-depth: 1
+
       # No API key secrets: refine requests only event pages and robots.txt, never a source API.
-      # The input goes through env, not inline, so its text is never parsed as script.
+      # The inputs go through env, not inline, so their text is never parsed as script.
       - name: Refine
         env:
           SKIP_LINK_CHECK: ${{ inputs.skip_link_check }}
@@ -92,7 +97,7 @@ jobs:
           $options = @{}
           if ($env:SKIP_LINK_CHECK -eq 'true') { $options.SkipLinkCheck = $true }
           if ($env:SKIP_CITY_LOOKUP -eq 'true') { $options.SkipCityLookup = $true }
-          ./ingestion/scripts/Invoke-Refine.ps1 @options
+          ./.engine/ingestion/scripts/Invoke-Refine.ps1 @options
 
       - name: Upload refine output
         if: always()
@@ -105,11 +110,11 @@ jobs:
       - name: Commit data
         run: |
           $paths = 'data/events.json', 'data/archive', 'data/links.json', 'data/city-lookup.json', 'data/meta.json'
-          ./ingestion/scripts/Publish-Data.ps1 -Path $paths -Message 'data: nightly refine'
+          ./.engine/ingestion/scripts/Publish-Data.ps1 -Path $paths -Message 'data: nightly refine'
 
   # The summary email, in its own job because GitHub serves a job's log only once that job has
   # finished, and the email attaches the refine job's log. Runs whatever refine's outcome, so a
-  # failed run is emailed too. These are the only secrets refine's workflow is given.
+  # failed run is emailed too. These are the only secrets refine uses.
   report:
     needs: [when, refine]
     if: always() && needs.when.outputs.run == 'true'
@@ -119,9 +124,17 @@ jobs:
       contents: read
       actions: read
     steps:
-      - name: Check out
+      - name: Check out the city
         uses: actions/checkout@v5
         with:
+          fetch-depth: 1
+
+      - name: Check out the engine
+        uses: actions/checkout@v5
+        with:
+          repository: rhundhausen/weekend
+          ref: main
+          path: .engine
           fetch-depth: 1
 
       - name: Download refine output
@@ -137,7 +150,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.run_id }}
-        run: ./ingestion/scripts/Save-RunLogs.ps1
+        run: ./.engine/ingestion/scripts/Save-RunLogs.ps1
 
       - name: Email the report
         if: always()
@@ -147,4 +160,4 @@ jobs:
           JOB_STATUS: ${{ needs.refine.result }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           EVENT: ${{ github.event_name }}
-        run: ./ingestion/scripts/Send-Report.ps1 -Kind refine
+        run: ./.engine/ingestion/scripts/Send-Report.ps1 -Kind refine

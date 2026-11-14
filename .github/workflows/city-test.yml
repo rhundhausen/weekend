@@ -1,0 +1,57 @@
+# Checks a city repo's own files with the engine, as a reusable workflow. A city repo's test.yml
+# runs it on every push and pull request:
+#
+#   jobs:
+#     check:
+#       uses: rhundhausen/weekend/.github/workflows/city-test.yml@main
+#
+# It validates city.json, ingestion/sources.json, and the stored events (data/events.json and the
+# archive) against the engine's schemas, then builds the site with the engine as its theme. The
+# engine's own tests run in its repo (test.yml), not here.
+
+name: city-test
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the city
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Check out the engine
+        uses: actions/checkout@v5
+        with:
+          repository: rhundhausen/weekend
+          ref: main
+          path: .engine
+          fetch-depth: 1
+
+      - name: Validate city.json
+        run: |
+          . ./.engine/ingestion/scripts/lib/City.ps1
+          $city = Get-WkCity
+          Write-Host "$($city.siteName): $($city.cities.Count) cities, time zone $($city.timeZone)"
+
+      - name: Validate sources
+        run: ./.engine/ingestion/scripts/Test-Sources.ps1
+
+      - name: Validate stored events
+        run: ./.engine/ingestion/scripts/Test-Schema.ps1
+
+      - name: Build the site
+        working-directory: website
+        shell: bash
+        run: bash ../.engine/website/build.sh

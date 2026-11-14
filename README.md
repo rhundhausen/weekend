@@ -12,18 +12,22 @@ This repo holds only code every city shares:
   report scripts.
 - `ingestion/schema`: the event and source JSON schemas.
 - `ingestion/tests`: Pester tests and their fixtures.
-- `website`: Hugo layouts, assets, and the Cloudflare Worker.
+- `ingestion/vocabulary`: categories, tags, and title case, which a city adds to.
+- `website`: the Hugo theme (layouts, assets, and the Cloudflare Worker) and its build script.
+  The theme config is `hugo.toml` at the repo root.
+- `.github/workflows`: the engine's own tests (`test.yml`) and the reusable workflows every city
+  calls: `ingest.yml`, `refine.yml`, and `city-test.yml`.
 
 Each city has its own repo (such as weekendboise) holding everything specific to that city:
-`ingestion/sources.json`, `data/`, `website/hugo.toml`, `website/wrangler.jsonc`, favicons and
-branding, and the city's docs. City names, sources, domains, and branding never live here.
+`city.json`, `ingestion/sources.json`, `data/`, `website/hugo.toml`, `website/wrangler.jsonc`,
+favicons and branding, thin workflows that call the engine's, and the city's docs. City facts
+never live here; adapters written for one site may (`docs/plan.md`).
 
 ## Status
 
-The code was copied from weekendboise and is not yet parameterized: some files still have Boise
-hardcoded in them. `docs/extraction.md` lists every file, which bucket it is in, and what is
-hardcoded. The ingest and refine workflows are kept in `docs/workflows-source/` until they become
-reusable workflows, so their schedules cannot fire from this repo.
+The code was copied from weekendboise (`docs/extraction.md` records that copy) and now reads every
+city fact from the city repo. `docs/plan.md` has the plan and the order of work. Cities track this
+repo's `main`: an engine push reaches a city at its next build or workflow run.
 
 ## Tests
 

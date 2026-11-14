@@ -27,6 +27,14 @@ Describe 'Test-IngestRan' {
     (& $gate -EventName workflow_run -Jobs $jobs).Run | Should -BeTrue
   }
 
+  It 'finds the ingest job inside a reusable workflow call (<conclusion>)' -ForEach @(
+    @{ conclusion = 'success'; run = $true }
+    @{ conclusion = 'skipped'; run = $false }
+  ) {
+    $jobs = @((New-Job 'nightly / when' success), (New-Job 'nightly / ingest' $conclusion), (New-Job 'nightly / report' success))
+    (& $gate -EventName workflow_run -Jobs $jobs).Run | Should -Be $run
+  }
+
   It 'skips the ingest run whose cron line was not midnight' {
     $jobs = @((New-Job when success), (New-Job ingest skipped))
     (& $gate -EventName workflow_run -Jobs $jobs).Run | Should -BeFalse

@@ -47,7 +47,8 @@ $jobs = try {
   @()
 }
 
-foreach ($job in $jobs | Where-Object { $_.name -notin $ExcludeJob }) {
+# A job in a reusable workflow call is named "<caller job> / <job>", so the last part is matched too.
+foreach ($job in $jobs | Where-Object { $_.name -notin $ExcludeJob -and ("$($_.name)" -split ' / ')[-1] -notin $ExcludeJob }) {
   # Job names become file names, so keep them plain.
   $name = ("$($job.name)" -replace '[^\w.-]+', '-').Trim('-')
   try {
