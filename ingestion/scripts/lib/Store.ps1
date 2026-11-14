@@ -4,7 +4,7 @@
 . "$PSScriptRoot/Http.ps1"
 . "$PSScriptRoot/Dedupe.ps1"
 
-function Read-TvEventFile {
+function Read-WkEventFile {
   [CmdletBinding()]
   param(
     [Parameter(Mandatory, Position = 0)]
@@ -14,10 +14,10 @@ function Read-TvEventFile {
   if (-not (Test-Path -LiteralPath $Path)) { return }
   $text = Get-Content -LiteralPath $Path -Raw
   if ([string]::IsNullOrWhiteSpace($text)) { return }
-  ConvertFrom-TvJson $text
+  ConvertFrom-WkJson $text
 }
 
-function Write-TvEventFile {
+function Write-WkEventFile {
   # 2-space JSON with LF line endings and a final newline, so git diffs stay small.
   [CmdletBinding()]
   param(
@@ -38,7 +38,7 @@ function Write-TvEventFile {
   [IO.File]::WriteAllText($Path, $text, [Text.UTF8Encoding]::new($false))
 }
 
-function Sort-TvEvents {
+function Sort-WkEvents {
   # Sorts by instant, not by string, so the order doesn't depend on culture or offset.
   [CmdletBinding()]
   param(
@@ -47,10 +47,10 @@ function Sort-TvEvents {
     [object[]]$Events
   )
 
-  $Events | Sort-Object @{ e = { Get-TvEventInstant $_.start } }, id
+  $Events | Sort-Object @{ e = { Get-WkEventInstant $_.start } }, id
 }
 
-function Test-TvEventPast {
+function Test-WkEventPast {
   # Past once it has ended, or once it has started if it reports no end.
   [CmdletBinding()]
   [OutputType([bool])]
@@ -64,13 +64,13 @@ function Test-TvEventPast {
 
   $last = if ($Event.end) { $Event.end } else { $Event.start }
   if ($last.Length -eq 10) {
-    $today = (ConvertTo-BoiseTime $Now).Substring(0, 10)
+    $today = (ConvertTo-LocalTime $Now).Substring(0, 10)
     return $last -lt $today
   }
-  (Get-TvEventInstant $last) -lt $Now
+  (Get-WkEventInstant $last) -lt $Now
 }
 
-function Get-CarriedTvEvents {
+function Get-CarriedWkEvents {
   <#
   .SYNOPSIS
     Picks the stored events that must survive a run.
@@ -100,7 +100,7 @@ function Get-CarriedTvEvents {
   )
 
   foreach ($event in $Existing) {
-    if (Test-TvEventPast $event $Now) {
+    if (Test-WkEventPast $event $Now) {
       $event
       continue
     }
@@ -114,7 +114,7 @@ function Get-CarriedTvEvents {
   }
 }
 
-function Restore-TvFetchedAt {
+function Restore-WkFetchedAt {
   <#
   .SYNOPSIS
     Keeps the first fetchedAt for each event and source already stored.
@@ -148,7 +148,7 @@ function Restore-TvFetchedAt {
   }
 }
 
-function Add-TvArchive {
+function Add-WkArchive {
   # Appends past events to data/archive/YYYY-MM.json, deduping within each month's file.
   [CmdletBinding()]
   param(
@@ -164,10 +164,10 @@ function Add-TvArchive {
 
   foreach ($month in ($Events | Group-Object { $_.start.Substring(0, 7) })) {
     $path = Join-Path $Directory "$($month.Name).json"
-    $stored = @(Read-TvEventFile $path)
+    $stored = @(Read-WkEventFile $path)
     $combined = @($stored) + @($month.Group)
-    $merged = @(Merge-TvEvents $combined -Priorities $Priorities)
-    Restore-TvFetchedAt $merged $stored
-    Write-TvEventFile $path @(Sort-TvEvents $merged)
+    $merged = @(Merge-WkEvents $combined -Priorities $Priorities)
+    Restore-WkFetchedAt $merged $stored
+    Write-WkEventFile $path @(Sort-WkEvents $merged)
   }
 }

@@ -2,7 +2,7 @@
 
 . "$PSScriptRoot/Http.ps1"
 
-function Get-TvRobotsGroup {
+function Get-WkRobotsGroup {
   # Returns the rules that apply to us: a group naming WeekendBoise if there is one, otherwise *.
   [CmdletBinding()]
   param(
@@ -48,7 +48,7 @@ function Get-TvRobotsGroup {
   }
 }
 
-function Test-TvRobotsAllowed {
+function Test-WkRobotsAllowed {
   <#
   .SYNOPSIS
     Tests a path, with its query string, against robots.txt.
@@ -68,7 +68,7 @@ function Test-TvRobotsAllowed {
   )
 
   $best = $null
-  foreach ($rule in (Get-TvRobotsGroup $Robots).Rules) {
+  foreach ($rule in (Get-WkRobotsGroup $Robots).Rules) {
     $pattern = '^' + ([regex]::Escape($rule.Path) -replace '\\\*', '.*')
     if ($pattern.EndsWith('\$')) { $pattern = $pattern.Substring(0, $pattern.Length - 2) + '$' }
     if ($Path -notmatch $pattern) { continue }
@@ -80,7 +80,7 @@ function Test-TvRobotsAllowed {
   (-not $best) -or $best.Allow
 }
 
-function Get-TvJsonLdEvent {
+function Get-WkJsonLdEvent {
   <#
   .SYNOPSIS
     Returns the schema.org Event objects embedded in a page as JSON-LD.
@@ -97,7 +97,7 @@ function Get-TvJsonLdEvent {
 
   foreach ($block in [regex]::Matches($Html, '(?is)<script[^>]*application/ld\+json[^>]*>(.*?)</script>')) {
     try {
-      $parsed = ConvertFrom-TvJson $block.Groups[1].Value.Trim()
+      $parsed = ConvertFrom-WkJson $block.Groups[1].Value.Trim()
     } catch {
       continue
     }
@@ -111,7 +111,7 @@ function Get-TvJsonLdEvent {
   }
 }
 
-function ConvertFrom-TvJsLiteral {
+function ConvertFrom-WkJsLiteral {
   <#
   .SYNOPSIS
     Reads a JavaScript literal, such as the data a SvelteKit page embeds for its first render.
@@ -223,7 +223,7 @@ function ConvertFrom-TvJsLiteral {
         }
       }
       if ($state.Params -and $state.Params.Contains($t.Value)) {
-        return [pscustomobject]@{ PSTypeName = 'TvJsRef'; Name = $t.Value }
+        return [pscustomobject]@{ PSTypeName = 'WkJsRef'; Name = $t.Value }
       }
       if ($t.Value -cin 'new', 'function', 'return') { throw "unexpected '$($t.Value)' at $($t.Index)" }
       throw "unknown name '$($t.Value)' at $($t.Index)"
@@ -238,7 +238,7 @@ function ConvertFrom-TvJsLiteral {
       return , $Value
     }
     if ($Value -is [pscustomobject]) {
-      if ($Value.PSObject.TypeNames[0] -eq 'TvJsRef') { return , $Values[$Value.Name] }
+      if ($Value.PSObject.TypeNames[0] -eq 'WkJsRef') { return , $Values[$Value.Name] }
       foreach ($p in $Value.PSObject.Properties) { $p.Value = Resolve-Ref $p.Value $Values }
     }
     return , $Value

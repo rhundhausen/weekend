@@ -20,7 +20,7 @@ param(
 . "$PSScriptRoot/../lib/Http.ps1"
 . "$PSScriptRoot/../lib/Ics.ps1"
 
-$text = if ($Response) { $Response[0] } else { Invoke-TvRequest $Source.url -Raw }
+$text = if ($Response) { $Response[0] } else { Invoke-WkRequest $Source.url -Raw }
 if ($text -notmatch 'BEGIN:VCALENDAR') {
   throw "$($Source.name): response is not an iCalendar feed"
 }
@@ -34,7 +34,7 @@ foreach ($item in (ConvertFrom-Ics $text)) {
     $title = ConvertTo-PlainText ($item.Summary -replace '^\[[A-Z]\]\s*', '')
     if ($Source.excludeTitlePattern -and $title -match $Source.excludeTitlePattern) { continue }
     $description = if ($item.Description.StartsWith($item.Summary)) { $item.Description.Substring($item.Summary.Length) } else { $item.Description }
-    $location = ConvertFrom-TvLocation $item.Location -Source $Source
+    $location = ConvertFrom-WkLocation $item.Location -Source $Source
     if ($Source.fixedVenue) {
       # Library feeds name rooms ("Children's Area"), not the building, which would split one venue.
       $location.Venue = $Source.venue
@@ -47,11 +47,11 @@ foreach ($item in (ConvertFrom-Ics $text)) {
     $end = $item.End
     if ($Source.localTimeAsUtc -and -not $item.AllDay) {
       # Events Calendar sites set to UTC+0 label Boise wall-clock time as UTC. Read the clock as local.
-      $start = ConvertTo-BoiseTime ([DateTimeOffset]::Parse($start, [Globalization.CultureInfo]::InvariantCulture).UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ss'))
-      if ($end) { $end = ConvertTo-BoiseTime ([DateTimeOffset]::Parse($end, [Globalization.CultureInfo]::InvariantCulture).UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ss')) }
+      $start = ConvertTo-LocalTime ([DateTimeOffset]::Parse($start, [Globalization.CultureInfo]::InvariantCulture).UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ss'))
+      if ($end) { $end = ConvertTo-LocalTime ([DateTimeOffset]::Parse($end, [Globalization.CultureInfo]::InvariantCulture).UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ss')) }
     }
 
-    New-TvEvent -Title $title -Start $start -End $end -AllDay:$item.AllDay `
+    New-WkEvent -Title $title -Start $start -End $end -AllDay:$item.AllDay `
       -Venue $location.Venue -VenueKey $location.VenueKey -City $location.City `
       -Category $Source.category -InferCategory:([bool]$Source.inferCategory) -Url $url -Description $description `
       -Sources @(@{ name = $Source.name; url = $url; fetchedAt = $FetchedAt })

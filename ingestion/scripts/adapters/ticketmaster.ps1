@@ -47,14 +47,14 @@ function Get-TicketmasterPage {
   $page = 0
   do {
     if ($page -gt 0) { Start-Sleep -Seconds 1 }
-    $result = Invoke-TvRequest "$($Source.url)?$filter&size=100&sort=date,asc&page=$page&apikey=$($env:TICKETMASTER_KEY)"
+    $result = Invoke-WkRequest "$($Source.url)?$filter&size=100&sort=date,asc&page=$page&apikey=$($env:TICKETMASTER_KEY)"
     $totalPages = [Math]::Min([int]$result.page.totalPages, 10)
     $result
     $page++
   } while ($page -lt $totalPages)
 }
 
-$pages = if ($Response) { $Response | ForEach-Object { ConvertFrom-TvJson $_ } } else { Get-TicketmasterPage }
+$pages = if ($Response) { $Response | ForEach-Object { ConvertFrom-WkJson $_ } } else { Get-TicketmasterPage }
 
 foreach ($item in ($pages | ForEach-Object { $_._embedded.events } | Where-Object { $_ })) {
   if ($item.test -or $item.dates.status.code -eq 'cancelled') { continue }
@@ -69,7 +69,7 @@ foreach ($item in ($pages | ForEach-Object { $_._embedded.events } | Where-Objec
   try {
     $when = $item.dates.start
     $allDay = -not $when.dateTime -or $when.timeTBA -or $when.noSpecificTime
-    $start = if ($allDay) { $when.localDate } else { ConvertTo-BoiseTime $when.dateTime }
+    $start = if ($allDay) { $when.localDate } else { ConvertTo-LocalTime $when.dateTime }
 
     $labels = @($segment, $classification.genre.name, $classification.subGenre.name)
     $category = if ($segment -and $categories.ContainsKey($segment)) { $categories[$segment] } else { $Source.category }
@@ -77,7 +77,7 @@ foreach ($item in ($pages | ForEach-Object { $_._embedded.events } | Where-Objec
     $venueName = if ($Source.venueId) { $Source.venue } else { ConvertTo-PlainText $venue.name }
     if (-not $venueName) { $venueName = $Source.venue }
     $venueKey = if ($Source.venueId -or -not $venue.name) { $Source.venueKey } else { Get-VenueKey $venueName }
-    $city = if ($Source.venueId) { $Source.city } else { Resolve-TvCity $venue.city.name }
+    $city = if ($Source.venueId) { $Source.city } else { Resolve-WkCity $venue.city.name }
     if (-not $city) { $city = $Source.city }
 
     # The cheapest ticket in any price range is priceMin. Face value: a range whose type
@@ -87,7 +87,7 @@ foreach ($item in ($pages | ForEach-Object { $_._embedded.events } | Where-Objec
     if ($faceValue.Count) { $ranges = $faceValue }
     $priceMin = if ($ranges.Count) { [decimal]($ranges.min | Measure-Object -Minimum).Minimum }
 
-    New-TvEvent -Title (ConvertTo-PlainText $item.name) -Start $start -AllDay:$allDay `
+    New-WkEvent -Title (ConvertTo-PlainText $item.name) -Start $start -AllDay:$allDay `
       -Venue $venueName -VenueKey $venueKey -City $city `
       -Category $category -InferCategory:([bool]$Source.inferCategory) -Labels $labels -Url $item.url -Description $item.info `
       -PriceMin $priceMin -Sources @(@{ name = $Source.name; url = $item.url; fetchedAt = $FetchedAt })

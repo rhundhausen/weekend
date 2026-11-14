@@ -27,37 +27,37 @@ BeforeAll {
   }
 }
 
-Describe 'Find-TvAddressCity' {
+Describe 'Find-WkAddressCity' {
   It 'finds <want> in <html>' -ForEach @(
     @{ html = '<p>7906 W Marigold St suite 100, Garden City, Idaho 83714</p>'; want = 'Garden City' }
     @{ html = '<p>201 W Main St, Nampa, ID 83651</p>'; want = 'Nampa' }
     @{ html = '<script type="application/ld+json">{"@type":"Event","name":"x","startDate":"2026-11-13","location":{"address":{"addressLocality":"Meridian","addressRegion":"ID"}}}</script>'; want = 'Meridian' }
   ) {
-    Find-TvAddressCity $html | Should -Be $want
+    Find-WkAddressCity $html | Should -Be $want
   }
 
   It 'gives up when the page names two cities' {
-    Find-TvAddressCity '<p>Boise, ID 83702</p><p>Nampa, ID 83651</p>' | Should -BeNullOrEmpty
+    Find-WkAddressCity '<p>Boise, ID 83702</p><p>Nampa, ID 83651</p>' | Should -BeNullOrEmpty
   }
 
   It 'ignores the site''s navigation and page header' {
     $page = '<header><nav><ul><li><a href="/g">Guide to Moving to Boise, ID</a></li></ul></nav></header>' +
       '<nav>Visit Meridian, ID</nav><main><div>5242 W Chinden Blvd, Garden City, ID 83714</div></main>'
-    Find-TvAddressCity $page | Should -Be 'Garden City'
+    Find-WkAddressCity $page | Should -Be 'Garden City'
   }
 
   It 'needs a state after the city, so prose does not count' {
-    Find-TvAddressCity '<p>Fun for all of Boise and Meridian</p>' | Should -BeNullOrEmpty
+    Find-WkAddressCity '<p>Fun for all of Boise and Meridian</p>' | Should -BeNullOrEmpty
   }
 }
 
-Describe 'Get-TvEventWebsite' {
+Describe 'Get-WkEventWebsite' {
   It 'reads the Website link from an Events Calendar page' {
-    Get-TvEventWebsite (New-EventPage -Website 'https://library.test/cal/#/events/1') | Should -Be 'https://library.test/cal/#/events/1'
+    Get-WkEventWebsite (New-EventPage -Website 'https://library.test/cal/#/events/1') | Should -Be 'https://library.test/cal/#/events/1'
   }
 }
 
-Describe 'Invoke-TvCityLookup' {
+Describe 'Invoke-WkCityLookup' {
   It 'follows the Website link to the organizer, ignoring the listing site footer' {
     $fetch = New-Fetcher @{
       'https://mom.test/robots.txt'     = ''
@@ -66,7 +66,7 @@ Describe 'Invoke-TvCityLookup' {
       'https://library.test/cal/'       = '<footer>7906 W Marigold St, Garden City, Idaho 83714</footer>'
     }
     $event = New-TestEvent
-    $result = Invoke-TvCityLookup @($event) -State @{} -Now $now -Fetch $fetch -MinDelaySeconds 0
+    $result = Invoke-WkCityLookup @($event) -State @{} -Now $now -Fetch $fetch -MinDelaySeconds 0
     $event.city | Should -Be 'Garden City'
     $result.Found | Should -Be 1
     $result.State['https://mom.test/event/journal/'].city | Should -Be 'Garden City'
@@ -79,7 +79,7 @@ Describe 'Invoke-TvCityLookup' {
       'https://mom.test/event/journal/' = (New-EventPage -Venue 'Eagle Public Library, 100 N Stierman Way, Eagle, ID 83616')
     }
     $event = New-TestEvent
-    $null = Invoke-TvCityLookup @($event) -State @{} -Now $now -Fetch $fetch -MinDelaySeconds 0
+    $null = Invoke-WkCityLookup @($event) -State @{} -Now $now -Fetch $fetch -MinDelaySeconds 0
     $event.city | Should -Be 'Eagle'
   }
 
@@ -92,7 +92,7 @@ Describe 'Invoke-TvCityLookup' {
       'https://cider.test/'             = '<p>224 N 9th St, Boise, ID 83702</p>'
     }
     $event = New-TestEvent
-    $null = Invoke-TvCityLookup @($event) -State @{} -Now $now -Fetch $fetch -MinDelaySeconds 0
+    $null = Invoke-WkCityLookup @($event) -State @{} -Now $now -Fetch $fetch -MinDelaySeconds 0
     $event.city | Should -Be 'Boise'
   }
 
@@ -102,7 +102,7 @@ Describe 'Invoke-TvCityLookup' {
       'https://mom.test/event/journal/' = (New-EventPage -Website 'https://www.facebook.com/share/p/1Fb6/')
     }
     $event = New-TestEvent
-    $null = Invoke-TvCityLookup @($event) -State @{} -Now $now -Fetch $fetch -MinDelaySeconds 0
+    $null = Invoke-WkCityLookup @($event) -State @{} -Now $now -Fetch $fetch -MinDelaySeconds 0
     $event.city | Should -Be 'Other'
     $requests | Where-Object { $_ -like '*facebook*' } | Should -BeNullOrEmpty
   }
@@ -114,7 +114,7 @@ Describe 'Invoke-TvCityLookup' {
       'https://private.test/robots.txt' = "User-agent: *`nDisallow: /"
     }
     $event = New-TestEvent
-    $null = Invoke-TvCityLookup @($event) -State @{} -Now $now -Fetch $fetch -MinDelaySeconds 0
+    $null = Invoke-WkCityLookup @($event) -State @{} -Now $now -Fetch $fetch -MinDelaySeconds 0
     $requests | Should -Not -Contain 'https://private.test/e/1'
     $requests | Should -Not -Contain 'https://private.test/'
   }
@@ -123,26 +123,26 @@ Describe 'Invoke-TvCityLookup' {
     $state = @{ 'https://mom.test/event/journal/' = [ordered]@{ city = 'Garden City'; checkedAt = '2026-11-01T08:00:00Z' } }
     $fetch = New-Fetcher @{}
     $event = New-TestEvent
-    $null = Invoke-TvCityLookup @($event) -State $state -Now $now -Fetch $fetch -MinDelaySeconds 0
+    $null = Invoke-WkCityLookup @($event) -State $state -Now $now -Fetch $fetch -MinDelaySeconds 0
     $event.city | Should -Be 'Garden City'
     $requests.Count | Should -Be 0
 
     $later = $now.AddDays(31)
-    $null = Invoke-TvCityLookup @((New-TestEvent)) -State $state -Now $later -Fetch $fetch -MinDelaySeconds 0
+    $null = Invoke-WkCityLookup @((New-TestEvent)) -State $state -Now $later -Fetch $fetch -MinDelaySeconds 0
     $requests | Should -Contain 'https://mom.test/event/journal/'
   }
 
   It 'waits 7 days before trying again on a page that named no city' {
     $state = @{ 'https://mom.test/event/journal/' = [ordered]@{ checkedAt = '2026-11-03T08:00:00Z' } }
     $fetch = New-Fetcher @{}
-    $null = Invoke-TvCityLookup @((New-TestEvent)) -State $state -Now $now -Fetch $fetch -MinDelaySeconds 0
+    $null = Invoke-WkCityLookup @((New-TestEvent)) -State $state -Now $now -Fetch $fetch -MinDelaySeconds 0
     $requests.Count | Should -Be 0
   }
 
   It 'leaves events that already have a city alone' {
     $fetch = New-Fetcher @{}
     $event = New-TestEvent -City 'Nampa'
-    $null = Invoke-TvCityLookup @($event) -State @{} -Now $now -Fetch $fetch -MinDelaySeconds 0
+    $null = Invoke-WkCityLookup @($event) -State @{} -Now $now -Fetch $fetch -MinDelaySeconds 0
     $requests.Count | Should -Be 0
   }
 
@@ -150,14 +150,14 @@ Describe 'Invoke-TvCityLookup' {
     $state = @{ 'https://mom.test/event/journal/' = [ordered]@{ city = 'Kuna'; checkedAt = '2026-10-01T08:00:00Z' } }
     $fetch = New-Fetcher @{}
     $event = New-TestEvent
-    $null = Invoke-TvCityLookup @($event) -State $state -Now $now -Fetch $fetch -MinDelaySeconds 0 -BudgetSeconds 0
+    $null = Invoke-WkCityLookup @($event) -State $state -Now $now -Fetch $fetch -MinDelaySeconds 0 -BudgetSeconds 0
     $event.city | Should -Be 'Kuna'
     $requests.Count | Should -Be 0
   }
 
   It 'forgets pages no event has used for 30 days' {
     $state = @{ 'https://mom.test/gone/' = [ordered]@{ city = 'Boise'; checkedAt = '2026-09-01T08:00:00Z' } }
-    $result = Invoke-TvCityLookup @() -State $state -Now $now -Fetch (New-Fetcher @{}) -MinDelaySeconds 0
+    $result = Invoke-WkCityLookup @() -State $state -Now $now -Fetch (New-Fetcher @{}) -MinDelaySeconds 0
     $result.State.ContainsKey('https://mom.test/gone/') | Should -BeFalse
   }
 }

@@ -42,7 +42,7 @@ function Get-EventbritePage {
     do {
       if (-not $first) { Start-Sleep -Seconds 1 }
       $first = $false
-      $result = Invoke-TvRequest "$($Source.url.TrimEnd('/'))/$($path)?status=live&order_by=start_asc&time_filter=current_future&expand=venue$continuation" -Headers $headers
+      $result = Invoke-WkRequest "$($Source.url.TrimEnd('/'))/$($path)?status=live&order_by=start_asc&time_filter=current_future&expand=venue$continuation" -Headers $headers
       $result
       $more = [bool]$result.pagination.has_more_items
       $continuation = "&continuation=$($result.pagination.continuation)"
@@ -50,19 +50,19 @@ function Get-EventbritePage {
   }
 }
 
-$pages = if ($Response) { $Response | ForEach-Object { ConvertFrom-TvJson $_ } } else { Get-EventbritePage }
+$pages = if ($Response) { $Response | ForEach-Object { ConvertFrom-WkJson $_ } } else { Get-EventbritePage }
 
 foreach ($item in ($pages | ForEach-Object { $_.events } | Where-Object { $_ })) {
   if ($item.status -eq 'canceled' -or $item.online_event) { continue }
 
   try {
-    $start = ConvertTo-BoiseTime "$($item.start.utc)"
-    $end = if ($item.end.utc) { ConvertTo-BoiseTime "$($item.end.utc)" }
+    $start = ConvertTo-LocalTime "$($item.start.utc)"
+    $end = if ($item.end.utc) { ConvertTo-LocalTime "$($item.end.utc)" }
     $venue = $item.venue
     $name = ConvertTo-PlainText $venue.name
-    $city = Resolve-TvCity $venue.address.city
+    $city = Resolve-WkCity $venue.address.city
 
-    New-TvEvent -Title (ConvertTo-PlainText $item.name.text) -Start $start -End $end `
+    New-WkEvent -Title (ConvertTo-PlainText $item.name.text) -Start $start -End $end `
       -Venue ($name ? $name : $Source.venue) -VenueKey ($name ? (Get-VenueKey $name) : $Source.venueKey) -City ($city ? $city : $Source.city) `
       -Category $Source.category -InferCategory:([bool]$Source.inferCategory) -Url $item.url -Description $item.summary `
       -Sources @(@{ name = $Source.name; url = $item.url; fetchedAt = $FetchedAt })

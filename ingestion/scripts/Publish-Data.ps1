@@ -35,7 +35,7 @@ if ($LASTEXITCODE -eq 0) {
   exit 0
 }
 
-$date = (ConvertTo-BoiseTime ([DateTimeOffset]::UtcNow)).Substring(0, 10)
+$date = (ConvertTo-LocalTime ([DateTimeOffset]::UtcNow)).Substring(0, 10)
 # Without -SkipDeploy there is no [skip ci], because Cloudflare skips commits that carry it and this
 # commit is what puts the new data on the site. The test workflow doesn't run either way, because
 # GitHub never starts workflows from a push made with the workflow's own GITHUB_TOKEN.

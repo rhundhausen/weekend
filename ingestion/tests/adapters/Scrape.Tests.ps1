@@ -626,67 +626,67 @@ Describe 'scrape adapter, staying out of bounds' {
   }
 
   BeforeEach {
-    $global:TvScrapeRequests = [System.Collections.Generic.List[string]]::new()
+    $global:WkScrapeRequests = [System.Collections.Generic.List[string]]::new()
   }
 
   AfterAll {
-    Remove-Variable -Name TvScrapeRequests -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable -Name WkScrapeRequests -Scope Global -ErrorAction SilentlyContinue
   }
 
   It 'sends no page request when robots.txt disallows the list page' {
     Mock Invoke-WebRequest {
-      $global:TvScrapeRequests.Add("$Uri")
+      $global:WkScrapeRequests.Add("$Uri")
       New-FakeResponse 200 "User-agent: *`nDisallow: /calendar"
     }
     { & $adapter -Source $source -FetchedAt $fetchedAt } | Should -Throw '*robots.txt disallows*'
-    $global:TvScrapeRequests | Should -Be @('https://indiancreekplaza.com/robots.txt')
+    $global:WkScrapeRequests | Should -Be @('https://indiancreekplaza.com/robots.txt')
   }
 
   It 'stops before a disallowed event page' {
     Mock Invoke-WebRequest {
-      $global:TvScrapeRequests.Add("$Uri")
+      $global:WkScrapeRequests.Add("$Uri")
       if ("$Uri" -like '*/robots.txt') { New-FakeResponse 200 "User-agent: *`nDisallow: /calendar/2026/" }
       else { New-FakeResponse 200 '<a href="/calendar/2026/12/1/event">x</a>' }
     }
     Mock Start-Sleep {}
     { & $adapter -Source $source -FetchedAt $fetchedAt } | Should -Throw '*robots.txt disallows*'
-    $global:TvScrapeRequests | Should -Not -Contain 'https://indiancreekplaza.com/calendar/2026/12/1/event'
+    $global:WkScrapeRequests | Should -Not -Contain 'https://indiancreekplaza.com/calendar/2026/12/1/event'
   }
 
   It 'obeys a site that names us' {
     Mock Invoke-WebRequest {
-      $global:TvScrapeRequests.Add("$Uri")
+      $global:WkScrapeRequests.Add("$Uri")
       New-FakeResponse 200 "User-agent: WeekendBoise`nDisallow: /"
     }
     { & $adapter -Source $source -FetchedAt $fetchedAt } | Should -Throw '*robots.txt disallows*'
-    $global:TvScrapeRequests.Count | Should -Be 1
+    $global:WkScrapeRequests.Count | Should -Be 1
   }
 
   It 'fails on a 403 and does not try again' {
     Mock Invoke-WebRequest {
-      $global:TvScrapeRequests.Add("$Uri")
+      $global:WkScrapeRequests.Add("$Uri")
       if ("$Uri" -like '*/robots.txt') { New-FakeResponse 404 } else { New-FakeResponse 403 'Just a moment...' }
     }
     { & $adapter -Source $source -FetchedAt $fetchedAt } | Should -Throw '*HTTP 403*'
-    $global:TvScrapeRequests.Count | Should -Be 2
+    $global:WkScrapeRequests.Count | Should -Be 2
   }
 
   It 'stops when robots.txt can not be read, because it can not tell what is allowed' {
     Mock Invoke-WebRequest {
-      $global:TvScrapeRequests.Add("$Uri")
+      $global:WkScrapeRequests.Add("$Uri")
       New-FakeResponse 403
     }
     { & $adapter -Source $source -FetchedAt $fetchedAt } | Should -Throw '*HTTP 403*'
-    $global:TvScrapeRequests.Count | Should -Be 1
+    $global:WkScrapeRequests.Count | Should -Be 1
   }
 
   It 'treats a missing robots.txt as no restrictions' {
     Mock Invoke-WebRequest {
-      $global:TvScrapeRequests.Add("$Uri")
+      $global:WkScrapeRequests.Add("$Uri")
       if ("$Uri" -like '*/robots.txt') { New-FakeResponse 404 } else { New-FakeResponse 200 '<html></html>' }
     }
     @(& $adapter -Source $source -FetchedAt $fetchedAt -WarningAction SilentlyContinue).Count | Should -Be 0
-    $global:TvScrapeRequests.Count | Should -Be 2
+    $global:WkScrapeRequests.Count | Should -Be 2
   }
 
   It 'waits the Crawl-delay between pages, at least 1 second' {
@@ -701,12 +701,12 @@ Describe 'scrape adapter, staying out of bounds' {
 
   It 'fails rather than stalling or ignoring a very long Crawl-delay' {
     Mock Invoke-WebRequest {
-      $global:TvScrapeRequests.Add("$Uri")
+      $global:WkScrapeRequests.Add("$Uri")
       New-FakeResponse 200 "User-agent: *`nCrawl-delay: 600"
     }
     Mock Start-Sleep {}
     { & $adapter -Source $source -FetchedAt $fetchedAt } | Should -Throw '*600 seconds between requests*'
-    $global:TvScrapeRequests.Count | Should -Be 1
+    $global:WkScrapeRequests.Count | Should -Be 1
     Should -Invoke Start-Sleep -Times 0 -Exactly
   }
 

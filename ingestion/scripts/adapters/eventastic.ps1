@@ -29,7 +29,7 @@ param(
 . "$PSScriptRoot/../lib/Scrape.ps1"
 
 $invariant = [Globalization.CultureInfo]::InvariantCulture
-$today = (ConvertTo-BoiseTime $FetchedAt).Substring(0, 10)
+$today = (ConvertTo-LocalTime $FetchedAt).Substring(0, 10)
 $last = [DateTime]::ParseExact($today, 'yyyy-MM-dd', $invariant).AddDays(180).ToString('yyyy-MM-dd', $invariant)
 
 function Get-EventasticPage {
@@ -37,12 +37,12 @@ function Get-EventasticPage {
   $path = '/wp-admin/admin-ajax.php'
   $robots = ''
   try {
-    $robots = Invoke-TvRequest "$site/robots.txt" -Raw
+    $robots = Invoke-WkRequest "$site/robots.txt" -Raw
   } catch {
     # No robots.txt means no restrictions. Any other failure means we can't tell, so stop.
     if ("$_" -notmatch 'HTTP 404') { throw }
   }
-  if (-not (Test-TvRobotsAllowed $robots $path)) { throw "$($Source.name): robots.txt disallows $path" }
+  if (-not (Test-WkRobotsAllowed $robots $path)) { throw "$($Source.name): robots.txt disallows $path" }
 
   # The same fields the site's own calendar sends.
   $body = @{
@@ -53,7 +53,7 @@ function Get-EventasticPage {
     end_date       = $last
     image_size     = 'thumbnail'
   }
-  Invoke-TvRequest "$site$path" -Method Post -Form $body
+  Invoke-WkRequest "$site$path" -Method Post -Form $body
 }
 
 function ConvertFrom-EventasticTime {
@@ -68,10 +68,10 @@ function ConvertFrom-EventasticTime {
 
 function Get-EventasticInstant {
   param([string]$Date, [int]$Minutes)
-  ConvertTo-BoiseTime ([DateTime]::ParseExact($Date, 'yyyy-MM-dd', $invariant).AddMinutes($Minutes))
+  ConvertTo-LocalTime ([DateTime]::ParseExact($Date, 'yyyy-MM-dd', $invariant).AddMinutes($Minutes))
 }
 
-$page = if ($Response) { ConvertFrom-TvJson $Response[0] } else { Get-EventasticPage }
+$page = if ($Response) { ConvertFrom-WkJson $Response[0] } else { Get-EventasticPage }
 
 foreach ($item in @($page.event_objects.PSObject.Properties.Value)) {
   try {
@@ -81,11 +81,11 @@ foreach ($item in @($page.event_objects.PSObject.Properties.Value)) {
     $meta = $item.meta
 
     $venueName = @($meta.thisVenues | Where-Object { $_ -and $_.name } | ForEach-Object { ConvertTo-PlainText $_.name })[0]
-    $city = Resolve-TvCity $meta.city
+    $city = Resolve-WkCity $meta.city
     if (-not $city) { $city = $Source.city }
     $labels = @($meta.thisCategories | Where-Object { $_ } | ForEach-Object { ConvertTo-PlainText $_.name })
     $url = if ($item.permalink) { $item.permalink } else { $Source.url }
-    $price = if ($meta.price) { ConvertFrom-TvPriceText (ConvertTo-PlainText $meta.price) }
+    $price = if ($meta.price) { ConvertFrom-WkPriceText (ConvertTo-PlainText $meta.price) }
 
     $startMinutes = ConvertFrom-EventasticTime $meta.start_time
     $endMinutes = ConvertFrom-EventasticTime $meta.end_time
@@ -111,10 +111,10 @@ foreach ($item in @($page.event_objects.PSObject.Properties.Value)) {
         Sources = @(@{ name = $Source.name; url = $url; fetchedAt = $FetchedAt })
       }
       if ($null -eq $startMinutes) {
-        New-TvEvent @common -Start $first -End ($final -gt $first ? $final : $null) -AllDay
+        New-WkEvent @common -Start $first -End ($final -gt $first ? $final : $null) -AllDay
       } else {
         $end = if ($null -ne $endMinutes -and ($final -gt $first -or $endMinutes -gt $startMinutes)) { Get-EventasticInstant $final $endMinutes }
-        New-TvEvent @common -Start (Get-EventasticInstant $first $startMinutes) -End $end
+        New-WkEvent @common -Start (Get-EventasticInstant $first $startMinutes) -End $end
       }
     }
   } catch {

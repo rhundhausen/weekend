@@ -43,7 +43,7 @@ BeforeAll {
   }
 }
 
-Describe 'Get-TvLinkVerdict' {
+Describe 'Get-WkLinkVerdict' {
   It 'calls <status> <kind> <want>' -ForEach @(
     @{ status = 200; kind = ''; want = 'ok' }
     @{ status = 301; kind = ''; want = 'ok' }
@@ -70,46 +70,46 @@ Describe 'Get-TvLinkVerdict' {
     @{ status = 451; kind = ''; want = 'blocked' }
     @{ status = 999; kind = ''; want = 'blocked' }
   ) {
-    Get-TvLinkVerdict -Status $status -ErrorKind $kind | Should -BeExactly $want
+    Get-WkLinkVerdict -Status $status -ErrorKind $kind | Should -BeExactly $want
   }
 }
 
-Describe 'Test-TvLink' {
+Describe 'Test-WkLink' {
   It 'reads a host that does not resolve as dns' {
     Mock Invoke-WebRequest { throw [System.Net.Http.HttpRequestException]::new('No such host is known.', [System.Net.Sockets.SocketException]::new(11001)) }
-    $result = Test-TvLink 'https://gone.test/e'
+    $result = Test-WkLink 'https://gone.test/e'
     $result.ErrorKind | Should -Be 'dns'
     $result.Verdict | Should -Be 'transient'
   }
 
   It 'reads a refused connection as refused' {
     Mock Invoke-WebRequest { throw [System.Net.Http.HttpRequestException]::new('No connection could be made because the target machine actively refused it.', [System.Net.Sockets.SocketException]::new(10061)) }
-    (Test-TvLink 'https://down.test/e').ErrorKind | Should -Be 'refused'
+    (Test-WkLink 'https://down.test/e').ErrorKind | Should -Be 'refused'
   }
 
   It 'reads a timeout as timeout' {
     Mock Invoke-WebRequest { throw [System.Threading.Tasks.TaskCanceledException]::new('The request was canceled due to the configured HttpClient.Timeout of 20 seconds elapsing.') }
-    (Test-TvLink 'https://slow.test/e').ErrorKind | Should -Be 'timeout'
+    (Test-WkLink 'https://slow.test/e').ErrorKind | Should -Be 'timeout'
   }
 
   It 'sends the project User-Agent and follows redirects' {
     Mock Invoke-WebRequest { New-FakeResponse 200 }
-    $null = Test-TvLink 'https://a.test/e'
-    Should -Invoke Invoke-WebRequest -Times 1 -ParameterFilter { $UserAgent -eq (Get-TvUserAgent) -and $MaximumRedirection -ge 5 }
+    $null = Test-WkLink 'https://a.test/e'
+    Should -Invoke Invoke-WebRequest -Times 1 -ParameterFilter { $UserAgent -eq (Get-WkUserAgent) -and $MaximumRedirection -ge 5 }
   }
 
   It 'follows a redirect from https to http, as a browser does' {
     Mock Invoke-WebRequest { New-FakeResponse 200 }
-    $null = Test-TvLink 'https://a.test/e'
+    $null = Test-WkLink 'https://a.test/e'
     Should -Invoke Invoke-WebRequest -Times 1 -ParameterFilter { $AllowInsecureRedirect }
   }
 }
 
-Describe 'Invoke-TvLinkCheck' {
+Describe 'Invoke-WkLinkCheck' {
   It 'never unlinks an event whose site blocks scripts' {
     Set-Responses @{ 'https://a.test/e' = 403 }
     $event = New-TestEvent
-    $result = Invoke-TvLinkCheck @($event) -State @{} -Now $now -BudgetSeconds 60
+    $result = Invoke-WkLinkCheck @($event) -State @{} -Now $now -BudgetSeconds 60
     $event.PSObject.Properties.Name | Should -Not -Contain 'linkBroken'
     $result.Broken.Count | Should -Be 0
     $result.State['https://a.test/e'].verdict | Should -Be 'blocked'
@@ -118,7 +118,7 @@ Describe 'Invoke-TvLinkCheck' {
   It 'unlinks an event on the first 404 and lists it' {
     Set-Responses @{ 'https://a.test/e' = 404 }
     $event = New-TestEvent
-    $result = Invoke-TvLinkCheck @($event) -State @{} -Now $now -BudgetSeconds 60
+    $result = Invoke-WkLinkCheck @($event) -State @{} -Now $now -BudgetSeconds 60
     $event.linkBroken | Should -BeTrue
     $result.Broken.Count | Should -Be 1
     $result.Broken[0].reason | Should -Be 'HTTP 404'
@@ -129,11 +129,11 @@ Describe 'Invoke-TvLinkCheck' {
   It 'needs two nights of timeouts before unlinking' {
     Set-Responses @{ 'https://a.test/e' = { throw [System.Threading.Tasks.TaskCanceledException]::new('timed out') } }
     $event = New-TestEvent
-    $first = Invoke-TvLinkCheck @($event) -State @{} -Now $now -BudgetSeconds 60
+    $first = Invoke-WkLinkCheck @($event) -State @{} -Now $now -BudgetSeconds 60
     $event.PSObject.Properties.Name | Should -Not -Contain 'linkBroken'
 
     $again = New-TestEvent
-    $second = Invoke-TvLinkCheck @($again) -State $first.State -Now $now.AddHours(24) -BudgetSeconds 60
+    $second = Invoke-WkLinkCheck @($again) -State $first.State -Now $now.AddHours(24) -BudgetSeconds 60
     $again.linkBroken | Should -BeTrue
     $second.Broken[0].reason | Should -Be 'timeout, 2 nights in a row'
   }
@@ -142,12 +142,12 @@ Describe 'Invoke-TvLinkCheck' {
     Mock Start-Sleep {}
     Mock Invoke-WebRequest { throw [System.Net.Http.HttpRequestException]::new('No such host is known.', [System.Net.Sockets.SocketException]::new(11001)) }
     $event = New-TestEvent
-    $first = Invoke-TvLinkCheck @($event) -State @{} -Now $now -BudgetSeconds 60
+    $first = Invoke-WkLinkCheck @($event) -State @{} -Now $now -BudgetSeconds 60
     $event.PSObject.Properties.Name | Should -Not -Contain 'linkBroken'
     $first.State['https://a.test/e'].error | Should -Be 'dns'
 
     $again = New-TestEvent
-    $second = Invoke-TvLinkCheck @($again) -State $first.State -Now $now.AddHours(24) -BudgetSeconds 60
+    $second = Invoke-WkLinkCheck @($again) -State $first.State -Now $now.AddHours(24) -BudgetSeconds 60
     $again.linkBroken | Should -BeTrue
     $second.Broken[0].reason | Should -Be 'dns, 2 nights in a row'
   }
@@ -155,14 +155,14 @@ Describe 'Invoke-TvLinkCheck' {
   It 'treats a damaged state entry as due instead of failing the run' {
     Set-Responses @{}
     $state = @{ 'https://a.test/e' = @{ verdict = 'ok'; status = 200; failures = 0 } }
-    $result = Invoke-TvLinkCheck @(New-TestEvent) -State $state -Now $now -BudgetSeconds 60
+    $result = Invoke-WkLinkCheck @(New-TestEvent) -State $state -Now $now -BudgetSeconds 60
     $result.Checked.Count | Should -Be 1
   }
 
   It 'switches to another source''s working link instead of unlinking' {
     Set-Responses @{ 'https://a.test/e' = 404; 'https://b.test/e' = 200 }
     $event = New-TestEvent -OtherUrls 'https://b.test/e'
-    $result = Invoke-TvLinkCheck @($event) -State @{} -Now $now -BudgetSeconds 60
+    $result = Invoke-WkLinkCheck @($event) -State @{} -Now $now -BudgetSeconds 60
     $event.url | Should -Be 'https://b.test/e'
     $event.PSObject.Properties.Name | Should -Not -Contain 'linkBroken'
     $result.Broken.Count | Should -Be 0
@@ -171,7 +171,7 @@ Describe 'Invoke-TvLinkCheck' {
   It 'does not switch to another link that is unchecked or broken' {
     Set-Responses @{ 'https://a.test/e' = 404; 'https://b.test/e' = 404 }
     $event = New-TestEvent -OtherUrls 'https://b.test/e'
-    $null = Invoke-TvLinkCheck @($event) -State @{} -Now $now -BudgetSeconds 60
+    $null = Invoke-WkLinkCheck @($event) -State @{} -Now $now -BudgetSeconds 60
     $event.url | Should -Be 'https://a.test/e'
     $event.linkBroken | Should -BeTrue
   }
@@ -179,7 +179,7 @@ Describe 'Invoke-TvLinkCheck' {
   It 'does not recheck a link that worked 2 days ago' {
     Set-Responses @{}
     $state = @{ 'https://a.test/e' = @{ verdict = 'ok'; status = 200; checkedAt = '2026-11-04T07:00:00Z'; failures = 0 } }
-    $result = Invoke-TvLinkCheck @(New-TestEvent) -State $state -Now $now -BudgetSeconds 60
+    $result = Invoke-WkLinkCheck @(New-TestEvent) -State $state -Now $now -BudgetSeconds 60
     Should -Invoke Invoke-WebRequest -Times 0
     $result.Checked.Count | Should -Be 0
   }
@@ -187,7 +187,7 @@ Describe 'Invoke-TvLinkCheck' {
   It 'rechecks a link that worked 8 days ago' {
     Set-Responses @{}
     $state = @{ 'https://a.test/e' = @{ verdict = 'ok'; status = 200; checkedAt = '2026-10-29T07:00:00Z'; failures = 0 } }
-    $result = Invoke-TvLinkCheck @(New-TestEvent) -State $state -Now $now -BudgetSeconds 60
+    $result = Invoke-WkLinkCheck @(New-TestEvent) -State $state -Now $now -BudgetSeconds 60
     $result.Checked.Count | Should -Be 1
   }
 
@@ -196,7 +196,7 @@ Describe 'Invoke-TvLinkCheck' {
     $state = @{ 'https://a.test/e' = @{ verdict = 'broken'; status = 404; checkedAt = '2026-11-05T07:00:00Z'; brokenSince = '2026-11-01T07:00:00Z'; failures = 0 } }
     $event = New-TestEvent
     $event | Add-Member -NotePropertyName linkBroken -NotePropertyValue $true
-    $result = Invoke-TvLinkCheck @($event) -State $state -Now $now -BudgetSeconds 60
+    $result = Invoke-WkLinkCheck @($event) -State $state -Now $now -BudgetSeconds 60
     $event.PSObject.Properties.Name | Should -Not -Contain 'linkBroken'
     $result.State['https://a.test/e'].Keys | Should -Not -Contain 'brokenSince'
   }
@@ -206,7 +206,7 @@ Describe 'Invoke-TvLinkCheck' {
     $state = @{ 'https://b.test/x' = @{ verdict = 'broken'; status = 404; checkedAt = '2026-11-06T06:00:00Z'; brokenSince = '2026-11-06T06:00:00Z'; failures = 0 } }
     $fresh = New-TestEvent
     $known = New-TestEvent -Url 'https://b.test/x'
-    $result = Invoke-TvLinkCheck @($fresh, $known) -State $state -Now $now -BudgetSeconds 0
+    $result = Invoke-WkLinkCheck @($fresh, $known) -State $state -Now $now -BudgetSeconds 0
     Should -Invoke Invoke-WebRequest -Times 0
     $fresh.PSObject.Properties.Name | Should -Not -Contain 'linkBroken'
     $known.linkBroken | Should -BeTrue
@@ -216,7 +216,7 @@ Describe 'Invoke-TvLinkCheck' {
   It 'never requests a path robots.txt disallows' {
     Set-Responses @{ 'https://a.test/private/e' = 404 } -Robots "User-agent: *`nDisallow: /private/"
     $event = New-TestEvent -Url 'https://a.test/private/e'
-    $result = Invoke-TvLinkCheck @($event) -State @{} -Now $now -BudgetSeconds 60
+    $result = Invoke-WkLinkCheck @($event) -State @{} -Now $now -BudgetSeconds 60
     Should -Invoke Invoke-WebRequest -Times 0 -ParameterFilter { $Uri -eq 'https://a.test/private/e' }
     $event.PSObject.Properties.Name | Should -Not -Contain 'linkBroken'
     $result.State['https://a.test/private/e'].verdict | Should -Be 'skipped'
@@ -226,7 +226,7 @@ Describe 'Invoke-TvLinkCheck' {
     Set-Responses @{}
     $late = New-TestEvent -Url 'https://a.test/late' -Start '2026-12-20T19:00:00-07:00'
     $soon = New-TestEvent -Url 'https://a.test/soon' -Start '2026-11-07T19:00:00-07:00'
-    $result = Invoke-TvLinkCheck @($late, $soon) -State @{} -Now $now -BudgetSeconds 60
+    $result = Invoke-WkLinkCheck @($late, $soon) -State @{} -Now $now -BudgetSeconds 60
     $result.Checked.url | Should -Be @('https://a.test/soon', 'https://a.test/late')
     Should -Invoke Invoke-WebRequest -Times 1 -ParameterFilter { $Uri -like '*/robots.txt' }
   }
@@ -236,7 +236,7 @@ Describe 'Invoke-TvLinkCheck' {
     $mine = New-TestEvent -Url 'https://a.test/mine'
     $theirs = New-TestEvent -Url 'https://a.test/theirs'
     $theirs.sources[0].name = 'b'
-    $result = Invoke-TvLinkCheck @($mine, $theirs) -State @{} -Now $now -BudgetSeconds 60 -OnlySource 'a'
+    $result = Invoke-WkLinkCheck @($mine, $theirs) -State @{} -Now $now -BudgetSeconds 60 -OnlySource 'a'
     $result.Checked.url | Should -Be @('https://a.test/mine')
   }
 
@@ -246,18 +246,18 @@ Describe 'Invoke-TvLinkCheck' {
       'https://old.test/e' = @{ verdict = 'ok'; status = 200; checkedAt = '2026-10-01T07:00:00Z'; failures = 0 }
       'https://recent.test/e' = @{ verdict = 'ok'; status = 200; checkedAt = '2026-11-01T07:00:00Z'; failures = 0 }
     }
-    $result = Invoke-TvLinkCheck @() -State $state -Now $now -BudgetSeconds 0
+    $result = Invoke-WkLinkCheck @() -State $state -Now $now -BudgetSeconds 0
     $result.State.Keys | Should -Not -Contain 'https://old.test/e'
     $result.State.Keys | Should -Contain 'https://recent.test/e'
   }
 }
 
-Describe 'Write-TvLinkState and Read-TvLinkState' {
+Describe 'Write-WkLinkState and Read-WkLinkState' {
   It 'writes a status it read back as a whole number, so an unchanged file stays unchanged' {
     $path = Join-Path $TestDrive 'links-int.json'
-    Write-TvLinkState $path @{ 'https://a.test/e' = @{ verdict = 'ok'; status = 200; checkedAt = '2026-11-06T07:00:00Z'; failures = 0 } }
+    Write-WkLinkState $path @{ 'https://a.test/e' = @{ verdict = 'ok'; status = 200; checkedAt = '2026-11-06T07:00:00Z'; failures = 0 } }
     $before = Get-Content $path -Raw
-    Write-TvLinkState $path (Read-TvLinkState $path)
+    Write-WkLinkState $path (Read-WkLinkState $path)
     Get-Content $path -Raw | Should -BeExactly $before
   }
 
@@ -267,27 +267,27 @@ Describe 'Write-TvLinkState and Read-TvLinkState' {
       'https://b.test/e' = @{ verdict = 'ok'; status = 200; checkedAt = '2026-11-06T07:00:00Z'; failures = 0 }
       'https://a.test/e' = @{ verdict = 'broken'; status = 404; checkedAt = '2026-11-06T07:00:00Z'; brokenSince = '2026-11-06T07:00:00Z'; failures = 0 }
     }
-    Write-TvLinkState $path $state
+    Write-WkLinkState $path $state
     $text = Get-Content $path -Raw
     $text.IndexOf('https://a.test/e') | Should -BeLessThan $text.IndexOf('https://b.test/e')
     $text | Should -Not -Match "`r"
-    $back = Read-TvLinkState $path
+    $back = Read-WkLinkState $path
     $back['https://a.test/e'].brokenSince | Should -Be '2026-11-06T07:00:00Z'
   }
 
   It 'reads a missing file as empty' {
-    (Read-TvLinkState (Join-Path $TestDrive 'nope.json')).Count | Should -Be 0
+    (Read-WkLinkState (Join-Path $TestDrive 'nope.json')).Count | Should -Be 0
   }
 }
 
-Describe 'ConvertTo-TvLinkSummary' {
+Describe 'ConvertTo-WkLinkSummary' {
   It 'groups broken links by source, new ones first' {
     $broken = @(
       [pscustomobject]@{ title = 'Old Break'; start = '2026-11-10'; url = 'https://a.test/1'; sources = 'a'; reason = 'HTTP 404'; brokenSince = '2026-11-01T07:00:00Z'; new = $false }
       [pscustomobject]@{ title = 'New Break'; start = '2026-11-12'; url = 'https://a.test/2'; sources = 'a'; reason = 'HTTP 410'; brokenSince = '2026-11-06T07:00:00Z'; new = $true }
       [pscustomobject]@{ title = 'Other'; start = '2026-11-11'; url = 'https://b.test/1'; sources = 'b'; reason = 'HTTP 404'; brokenSince = '2026-11-06T07:00:00Z'; new = $true }
     )
-    $text = ConvertTo-TvLinkSummary $broken -Checked 40
+    $text = ConvertTo-WkLinkSummary $broken -Checked 40
     $text | Should -Match '## Broken links'
     $text | Should -Match '### a'
     $text.IndexOf('New Break') | Should -BeLessThan $text.IndexOf('Old Break')
@@ -295,6 +295,6 @@ Describe 'ConvertTo-TvLinkSummary' {
   }
 
   It 'says so when nothing is broken' {
-    ConvertTo-TvLinkSummary @() -Checked 3 | Should -Match 'No broken links'
+    ConvertTo-WkLinkSummary @() -Checked 3 | Should -Match 'No broken links'
   }
 }

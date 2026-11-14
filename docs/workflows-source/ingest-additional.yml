@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 1
-          sparse-checkout: ingestion/scripts/Test-BoiseHour.ps1
+          sparse-checkout: ingestion/scripts/Test-LocalHour.ps1
           sparse-checkout-cone-mode: false
       - name: Check Boise time
         id: check
@@ -31,7 +31,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           SCHEDULE: ${{ github.event.schedule }}
         shell: pwsh
-        run: ./ingestion/scripts/Test-BoiseHour.ps1 -Hour 23
+        run: ./ingestion/scripts/Test-LocalHour.ps1 -Hour 23
 
   run:
     needs: when

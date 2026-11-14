@@ -27,7 +27,7 @@ param(
 . "$PSScriptRoot/../lib/Schema.ps1"
 . "$PSScriptRoot/../lib/Http.ps1"
 
-$text = if ($Response) { $Response } else { Invoke-TvRequest $Source.url -Raw }
+$text = if ($Response) { $Response } else { Invoke-WkRequest $Source.url -Raw }
 $feed = [xml]$text
 $ns = [System.Xml.XmlNamespaceManager]::new($feed.NameTable)
 $ns.AddNamespace('ev', 'http://purl.org/rss/1.0/modules/event/')
@@ -44,9 +44,9 @@ foreach ($item in $feed.SelectNodes('/rss/channel/item')) {
     if (-not $startText) { continue }
     if ($Source.excludeTitlePattern -and $title -match $Source.excludeTitlePattern) { continue }
 
-    $start = ConvertTo-BoiseTime $startText
+    $start = ConvertTo-LocalTime $startText
     $endText = Get-ItemText $item 'ev:enddate'
-    $end = if ($endText) { ConvertTo-BoiseTime $endText }
+    $end = if ($endText) { ConvertTo-LocalTime $endText }
     if ($end -and $end -le $start) { $end = $null }
 
     $location = ConvertTo-PlainText (Get-ItemText $item 'ev:location')
@@ -62,7 +62,7 @@ foreach ($item in $feed.SelectNodes('/rss/channel/item')) {
     $url = if ($link) { $link } else { $Source.url }
     $type = ConvertTo-PlainText (Get-ItemText $item 'ev:type')
 
-    New-TvEvent -Title $title -Start $start -End $end -Venue $venue -VenueKey $venueKey -City $Source.city `
+    New-WkEvent -Title $title -Start $start -End $end -Venue $venue -VenueKey $venueKey -City $Source.city `
       -Category $Source.category -InferCategory:([bool]$Source.inferCategory) -Labels @($type | Where-Object { $_ }) `
       -Url $url -Description (ConvertTo-PlainText (Get-ItemText $item 'description')) `
       -Sources @(@{ name = $Source.name; url = $url; fetchedAt = $FetchedAt })

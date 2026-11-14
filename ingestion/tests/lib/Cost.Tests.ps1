@@ -10,7 +10,7 @@ BeforeAll {
       [string]$Description,
       [AllowNull()][Nullable[decimal]]$PriceMin
     )
-    New-TvEvent -Title $Title -Start '2026-11-14T19:30:00-07:00' -Venue $Venue -Category $Category -Url "https://$Source.test/e" `
+    New-WkEvent -Title $Title -Start '2026-11-14T19:30:00-07:00' -Venue $Venue -Category $Category -Url "https://$Source.test/e" `
       -Description $Description -PriceMin $PriceMin -Sources @(@{ name = $Source; url = "https://$Source.test/e"; fetchedAt = '2026-11-01T10:00:00Z' })
   }
 }
@@ -48,7 +48,7 @@ Describe 'Get-CostTier' {
   }
 }
 
-Describe 'ConvertFrom-TvPriceText' {
+Describe 'ConvertFrom-WkPriceText' {
   It 'reads "<text>" as <want>' -ForEach @(
     @{ text = 'Free'; want = 0 }
     @{ text = '$0'; want = 0 }
@@ -76,7 +76,7 @@ Describe 'ConvertFrom-TvPriceText' {
     # A pass with no single-day price is the pass price.
     @{ text = 'Season pass $120'; want = 120 }
   ) {
-    ConvertFrom-TvPriceText $text | Should -Be $want
+    ConvertFrom-WkPriceText $text | Should -Be $want
   }
 
   It 'gives null for "<text>"' -ForEach @(
@@ -87,16 +87,16 @@ Describe 'ConvertFrom-TvPriceText' {
     @{ text = '' }
     @{ text = $null }
   ) {
-    ConvertFrom-TvPriceText $text | Should -BeNullOrEmpty
+    ConvertFrom-WkPriceText $text | Should -BeNullOrEmpty
   }
 
   It 'ignores the word free in prose, where it rarely means the price' {
-    ConvertFrom-TvPriceText 'Feel free to bring a chair.' -Prose | Should -BeNullOrEmpty
-    ConvertFrom-TvPriceText 'Feel free to bring a chair. Tickets are $18.' -Prose | Should -Be 18
+    ConvertFrom-WkPriceText 'Feel free to bring a chair.' -Prose | Should -BeNullOrEmpty
+    ConvertFrom-WkPriceText 'Feel free to bring a chair. Tickets are $18.' -Prose | Should -Be 18
   }
 }
 
-Describe 'New-TvEvent costTier' {
+Describe 'New-WkEvent costTier' {
   It 'derives the tier from the price the source gave' {
     (New-TestEvent -PriceMin 39.99).costTier | Should -BeExactly '$$'
   }
@@ -126,11 +126,11 @@ Describe 'New-TvEvent costTier' {
   }
 
   It 'is valid with a tier' {
-    Test-TvEvent (New-TestEvent -PriceMin 5) | Should -BeTrue
+    Test-WkEvent (New-TestEvent -PriceMin 5) | Should -BeTrue
   }
 }
 
-Describe 'Update-TvLegacyCost' {
+Describe 'Update-WkLegacyCost' {
   It 'keeps the old tiers that mean the same under the new breakpoints, and drops the rest' {
     $events = @(
       [pscustomobject]@{ id = 'a'; cost = 'free' }
@@ -139,7 +139,7 @@ Describe 'Update-TvLegacyCost' {
       [pscustomobject]@{ id = 'd'; costGuess = '$$' }
       [pscustomobject]@{ id = 'e'; costTier = '$$' }
     )
-    Update-TvLegacyCost $events | Should -Be 4
+    Update-WkLegacyCost $events | Should -Be 4
     $events[0].costTier | Should -BeExactly 'free'
     $events[1].costTier | Should -BeExactly '$$$'
     $events[2].PSObject.Properties.Name | Should -Not -Contain 'costTier'
@@ -151,9 +151,9 @@ Describe 'Update-TvLegacyCost' {
   }
 }
 
-Describe 'Get-TvCostTierCounts' {
+Describe 'Get-WkCostTierCounts' {
   It 'counts each tier and unknown' {
-    $counts = Get-TvCostTierCounts @(
+    $counts = Get-WkCostTierCounts @(
       [pscustomobject]@{ costTier = 'free' }, [pscustomobject]@{ costTier = '$' }, [pscustomobject]@{ costTier = '$' },
       [pscustomobject]@{ id = 'x' }
     )
@@ -165,16 +165,16 @@ Describe 'Get-TvCostTierCounts' {
   }
 }
 
-Describe 'Merge-TvEvents costTier' {
+Describe 'Merge-WkEvents costTier' {
   It 'takes the tier from a lower-priority duplicate when the best one has none' {
-    $merged = @(Merge-TvEvents @((New-TestEvent -Source a), (New-TestEvent -Source b -PriceMin 30)) -Priorities @{ a = 10; b = 90 })
+    $merged = @(Merge-WkEvents @((New-TestEvent -Source a), (New-TestEvent -Source b -PriceMin 30)) -Priorities @{ a = 10; b = 90 })
     $merged.Count | Should -Be 1
     $merged[0].url | Should -Be 'https://a.test/e'
     $merged[0].costTier | Should -BeExactly '$$'
   }
 
   It 'keeps the best source''s own tier' {
-    $merged = @(Merge-TvEvents @((New-TestEvent -Source a -PriceMin 5), (New-TestEvent -Source b -PriceMin 30)) -Priorities @{ a = 10; b = 90 })
+    $merged = @(Merge-WkEvents @((New-TestEvent -Source a -PriceMin 5), (New-TestEvent -Source b -PriceMin 30)) -Priorities @{ a = 10; b = 90 })
     $merged[0].costTier | Should -BeExactly '$'
   }
 }

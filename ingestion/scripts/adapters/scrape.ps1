@@ -37,19 +37,19 @@ param(
 . "$PSScriptRoot/../lib/Ics.ps1"
 
 $listUri = [uri]$Source.url
-$today = (ConvertTo-BoiseTime $FetchedAt).Substring(0, 10)
+$today = (ConvertTo-LocalTime $FetchedAt).Substring(0, 10)
 $script:robots = ''
 $script:delay = 1
 $script:requests = 0
 
 if (-not $Response) {
   try {
-    $script:robots = Invoke-TvRequest "$($listUri.GetLeftPart('Authority'))/robots.txt" -Raw
+    $script:robots = Invoke-WkRequest "$($listUri.GetLeftPart('Authority'))/robots.txt" -Raw
   } catch {
     # No robots.txt means no restrictions. Any other failure means we can't tell, so stop.
     if ("$_" -notmatch 'HTTP 404') { throw }
   }
-  $script:delay = [Math]::Max(1, [int](Get-TvRobotsGroup $script:robots).Delay)
+  $script:delay = [Math]::Max(1, [int](Get-WkRobotsGroup $script:robots).Delay)
   if ($script:delay -gt 60) {
     # Waiting would stall the nightly run, and ignoring the delay isn't an option.
     throw "$($Source.name): robots.txt asks for $($script:delay) seconds between requests"
@@ -60,12 +60,12 @@ function Get-ScrapePage {
   param([uri]$Uri)
 
   $requested = $Uri.PathAndQuery
-  if (-not (Test-TvRobotsAllowed $script:robots $requested)) {
+  if (-not (Test-WkRobotsAllowed $script:robots $requested)) {
     throw "$($Source.name): robots.txt disallows $requested"
   }
   if ($script:requests -gt 0) { Start-Sleep -Seconds $script:delay }
   $script:requests++
-  Invoke-TvRequest $Uri.AbsoluteUri -Raw
+  Invoke-WkRequest $Uri.AbsoluteUri -Raw
 }
 
 function ConvertFrom-ScrapeDate {
@@ -83,9 +83,9 @@ function ConvertFrom-ScrapeDate {
   if ($Source.localTimeAsUtc) {
     # Modern Events Calendar writes Boise wall-clock time as if it were UTC, then shifts it.
     $wall = [DateTime]::SpecifyKind($parsed.UtcDateTime, [DateTimeKind]::Unspecified)
-    return @{ Value = ConvertTo-BoiseTime $wall; AllDay = $false }
+    return @{ Value = ConvertTo-LocalTime $wall; AllDay = $false }
   }
-  @{ Value = ConvertTo-BoiseTime $parsed; AllDay = $false }
+  @{ Value = ConvertTo-LocalTime $parsed; AllDay = $false }
 }
 
 function New-ScrapeEvent {
@@ -104,11 +104,11 @@ function New-ScrapeEvent {
   $name = if ($Source.fixedVenue) { '' } else { ConvertTo-PlainText $VenueName }
   $city = $null
   foreach ($part in ((ConvertTo-PlainText $CityText) -split ',')) {
-    $city = Resolve-TvCity ($part -replace '\s+ID(\s+\d{5})?$', '')
+    $city = Resolve-WkCity ($part -replace '\s+ID(\s+\d{5})?$', '')
     if ($city) { break }
   }
 
-  New-TvEvent -Title $Title -Start $Start -End $End -AllDay:$AllDay `
+  New-WkEvent -Title $Title -Start $Start -End $End -AllDay:$AllDay `
     -Venue ($name ? $name : $Source.venue) -VenueKey ($name ? (Get-VenueKey $name) : $Source.venueKey) `
     -City ($city ? $city : $Source.city) -Category $Source.category -InferCategory:([bool]$Source.inferCategory) `
     -Url $Url -Description $Description -PriceMin $PriceMin -Sources @(@{ name = $Source.name; url = $Url; fetchedAt = $FetchedAt })
@@ -166,7 +166,7 @@ function Read-JsonLdSource {
   $html = if ($Response) { $Response[0] } else { Get-ScrapePage $listUri }
 
   if (-not $Source.eventLinkPattern) {
-    foreach ($node in (Get-TvJsonLdEvent $html)) {
+    foreach ($node in (Get-WkJsonLdEvent $html)) {
       try {
         Read-JsonLdEvent $node ''
       } catch {
@@ -197,7 +197,7 @@ function Read-JsonLdSource {
   for ($i = 0; $i -lt $links.Count; $i++) {
     try {
       $page = if ($Response) { $Response[$i + 1] } else { Get-ScrapePage ([uri]$links[$i]) }
-      foreach ($node in @(Get-TvJsonLdEvent "$page" | Select-Object -First 1)) {
+      foreach ($node in @(Get-WkJsonLdEvent "$page" | Select-Object -First 1)) {
         Read-JsonLdEvent $node $links[$i]
       }
     } catch {
@@ -272,9 +272,9 @@ function Read-CardsSource {
       if ($null -ne $startMinutes) {
         # A timed event: the first date at the start time, ending the same day if an end time is given.
         $day = [DateTime]::ParseExact($dates[0], 'yyyy-MM-dd', $invariant)
-        $start = ConvertTo-BoiseTime $day.AddMinutes($startMinutes)
+        $start = ConvertTo-LocalTime $day.AddMinutes($startMinutes)
         $endMinutes = ConvertFrom-ClockTime ($time.Groups['end'].Value -replace '<[^>]*>', '')
-        $end = if ($null -ne $endMinutes -and $endMinutes -gt $startMinutes) { ConvertTo-BoiseTime $day.AddMinutes($endMinutes) }
+        $end = if ($null -ne $endMinutes -and $endMinutes -gt $startMinutes) { ConvertTo-LocalTime $day.AddMinutes($endMinutes) }
         New-ScrapeEvent -Title $title -Start $start -End $end -AllDay $false -Url $link
         continue
       }
@@ -296,7 +296,7 @@ function ConvertFrom-CalendarAppTime {
   if (-not [DateTime]::TryParseExact($Value, 'yyyy-MM-dd HH:mm', [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None, [ref]$parsed)) {
     return $null
   }
-  @{ Value = ConvertTo-BoiseTime $parsed; AllDay = $false }
+  @{ Value = ConvertTo-LocalTime $parsed; AllDay = $false }
 }
 
 function Read-CalendarAppSource {
@@ -305,7 +305,7 @@ function Read-CalendarAppSource {
   $html = if ($Response) { $Response[0] } else { Get-ScrapePage $listUri }
   $match = [regex]::Match($html, '(?s)id="calendar-app"[^>]*?data-config=''(?<json>\{.*?\})''')
   if (-not $match.Success) { throw "$($Source.name): no #calendar-app data-config on the page" }
-  $config = ConvertFrom-TvJson ([System.Net.WebUtility]::HtmlDecode($match.Groups['json'].Value))
+  $config = ConvertFrom-WkJson ([System.Net.WebUtility]::HtmlDecode($match.Groups['json'].Value))
 
   foreach ($property in @($config.contentItems.PSObject.Properties)) {
     $item = $property.Value.cal
@@ -326,7 +326,7 @@ function Read-CalendarAppSource {
       $url = if ($item.eventUrl) { [uri]::new($listUri, [System.Net.WebUtility]::HtmlDecode($item.eventUrl)).AbsoluteUri } else { $Source.url }
 
       New-ScrapeEvent -Title $title -Start $start.Value -End $endValue -AllDay $start.AllDay `
-        -VenueName $venueName -CityText '' -Url $url -Description $item.bodyText -PriceMin (ConvertFrom-TvPriceText $item.cost)
+        -VenueName $venueName -CityText '' -Url $url -Description $item.bodyText -PriceMin (ConvertFrom-WkPriceText $item.cost)
     } catch {
       Write-Warning "$($Source.name): skipping '$($item.title)': $_"
     }
@@ -380,10 +380,10 @@ function Read-CivicPlusSource {
           $start = $day.ToString('yyyy-MM-dd', $invariant)
           if ($lastDay -gt $day) { $end = $lastDay.ToString('yyyy-MM-dd', $invariant) }
         } else {
-          $start = ConvertTo-BoiseTime $day.AddMinutes($startMinutes)
+          $start = ConvertTo-LocalTime $day.AddMinutes($startMinutes)
           if ($null -ne $endMinutes) {
             $endAt = $lastDay.AddMinutes($endMinutes)
-            if ($endAt -gt $day.AddMinutes($startMinutes)) { $end = ConvertTo-BoiseTime $endAt }
+            if ($endAt -gt $day.AddMinutes($startMinutes)) { $end = ConvertTo-LocalTime $endAt }
           }
         }
 
@@ -423,7 +423,7 @@ function ConvertFrom-ChamberMasterLocation {
   $city = $null
   foreach ($count in 2, 1) {
     if ($words.Count -ge $count) {
-      $city = Resolve-TvCity (($words | Select-Object -Last $count) -join ' ')
+      $city = Resolve-WkCity (($words | Select-Object -Last $count) -join ' ')
       if ($city) { break }
     }
   }
@@ -494,7 +494,7 @@ function Read-SvelteKitSource {
   $html = if ($Response) { $Response[0] } else { Get-ScrapePage $listUri }
   $match = [regex]::Match($html, '(?s)kit\.start\(app,\s*element,\s*\{.*?\bdata:\s*(?<d>\[.*?\])\s*,\s*form:')
   if (-not $match.Success) { throw "$($Source.name): no SvelteKit data on the page" }
-  $node = @(ConvertFrom-TvJsLiteral $match.Groups['d'].Value) | Where-Object { $_ -and $_.data.events } | Select-Object -First 1
+  $node = @(ConvertFrom-WkJsLiteral $match.Groups['d'].Value) | Where-Object { $_ -and $_.data.events } | Select-Object -First 1
   if (-not $node) { throw "$($Source.name): no SvelteKit data on the page with events" }
 
   $invariant = [Globalization.CultureInfo]::InvariantCulture
@@ -519,8 +519,8 @@ function Read-SvelteKitSource {
         $start = $from.ToString('yyyy-MM-dd', $invariant)
         if ($lastDay.Date -gt $from.Date) { $end = $lastDay.ToString('yyyy-MM-dd', $invariant) }
       } else {
-        $start = ConvertTo-BoiseTime $from
-        if ($to -and $to -gt $from) { $end = ConvertTo-BoiseTime $to }
+        $start = ConvertTo-LocalTime $from
+        if ($to -and $to -gt $from) { $end = ConvertTo-LocalTime $to }
       }
 
       # Titles name the place: "Dog Tales (@ Star Library)" or "Karoake Friday @ Helina Marie's".

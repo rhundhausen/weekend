@@ -36,23 +36,23 @@ $script:requests = 0
 
 if (-not $Response) {
   try {
-    $script:robots = Invoke-TvRequest "$($listUri.GetLeftPart('Authority'))/robots.txt" -Raw
+    $script:robots = Invoke-WkRequest "$($listUri.GetLeftPart('Authority'))/robots.txt" -Raw
   } catch {
     if ("$_" -notmatch 'HTTP 404') { throw }
   }
-  $script:delay = [Math]::Max(1, [int](Get-TvRobotsGroup $script:robots).Delay)
+  $script:delay = [Math]::Max(1, [int](Get-WkRobotsGroup $script:robots).Delay)
   if ($script:delay -gt 60) { throw "$($Source.name): robots.txt asks for $($script:delay) seconds between requests" }
 }
 
 function Get-EventbritePage {
   param([uri]$Uri)
 
-  if (-not (Test-TvRobotsAllowed $script:robots $Uri.PathAndQuery)) {
+  if (-not (Test-WkRobotsAllowed $script:robots $Uri.PathAndQuery)) {
     throw "$($Source.name): robots.txt disallows $($Uri.PathAndQuery)"
   }
   if ($script:requests -gt 0) { Start-Sleep -Seconds $script:delay }
   $script:requests++
-  Invoke-TvRequest $Uri.AbsoluteUri -Raw
+  Invoke-WkRequest $Uri.AbsoluteUri -Raw
 }
 
 function Read-ServerData {
@@ -64,7 +64,7 @@ function Read-ServerData {
   if ($at -lt 0) { throw "$($Source.name): no __SERVER_DATA__ on the page" }
   $reader = [Newtonsoft.Json.JsonTextReader]::new([IO.StringReader]::new($Html.Substring($at + 18)))
   $reader.DateParseHandling = [Newtonsoft.Json.DateParseHandling]::None
-  ConvertFrom-TvJson ([Newtonsoft.Json.Linq.JToken]::ReadFrom($reader).ToString([Newtonsoft.Json.Formatting]::None))
+  ConvertFrom-WkJson ([Newtonsoft.Json.Linq.JToken]::ReadFrom($reader).ToString([Newtonsoft.Json.Formatting]::None))
 }
 
 function Get-EventbritePriceMin {
@@ -72,7 +72,7 @@ function Get-EventbritePriceMin {
   # lowest price of 0 means free here.
   param([string]$Html)
 
-  $node = @(Get-TvJsonLdEvent $Html) | Select-Object -First 1
+  $node = @(Get-WkJsonLdEvent $Html) | Select-Object -First 1
   if (-not $node) { return $null }
   $prices = @(@($node.offers) | ForEach-Object { $_.lowPrice; $_.price } | ForEach-Object {
       $value = [decimal]0
@@ -99,16 +99,16 @@ for ($n = 0; $n -lt $kept.Count; $n++) {
   try {
     $zone = if ($item.timezone) { $item.timezone } else { 'America/Boise' }
     $allDay = -not $item.start_time
-    $start = if ($allDay) { $item.start_date } else { ConvertTo-BoiseTime "$($item.start_date) $($item.start_time)" $zone }
+    $start = if ($allDay) { $item.start_date } else { ConvertTo-LocalTime "$($item.start_date) $($item.start_time)" $zone }
     $end = if ($allDay) {
       if ($item.end_date -gt $item.start_date) { $item.end_date }
     } elseif ($item.end_date -and $item.end_time) {
-      $value = ConvertTo-BoiseTime "$($item.end_date) $($item.end_time)" $zone
+      $value = ConvertTo-LocalTime "$($item.end_date) $($item.end_time)" $zone
       if ($value -gt $start) { $value }
     }
 
     $venueName = ConvertTo-PlainText $item.primary_venue.name
-    $city = Resolve-TvCity $item.primary_venue.address.city
+    $city = Resolve-WkCity $item.primary_venue.address.city
     $url = "$($item.url)"
 
     $page = if ($Response) { if ($Response.Count -gt $n + 1) { $Response[$n + 1] } } else {
@@ -119,7 +119,7 @@ for ($n = 0; $n -lt $kept.Count; $n++) {
     }
     $priceMin = if ($page) { Get-EventbritePriceMin $page }
 
-    New-TvEvent -Title (ConvertTo-PlainText $item.name) -Start $start -End $end -AllDay:$allDay `
+    New-WkEvent -Title (ConvertTo-PlainText $item.name) -Start $start -End $end -AllDay:$allDay `
       -Venue ($venueName ? $venueName : $Source.venue) -VenueKey ($venueName ? (Get-VenueKey $venueName) : $Source.venueKey) `
       -City ($city ? $city : $Source.city) -Category $Source.category -InferCategory:([bool]$Source.inferCategory) `
       -Url $url -Description $item.summary -PriceMin $priceMin -Sources @(@{ name = $Source.name; url = $url; fetchedAt = $FetchedAt })

@@ -59,7 +59,7 @@ $global:LASTEXITCODE = 0
 & (Join-Path $PSScriptRoot 'Test-Sources.ps1') -Path $SourcesPath
 if ($LASTEXITCODE -ne 0) { exit 1 }
 
-$sourcesFile = Get-Content -LiteralPath $SourcesPath -Raw | ConvertFrom-TvJson
+$sourcesFile = Get-Content -LiteralPath $SourcesPath -Raw | ConvertFrom-WkJson
 $allSources = @($sourcesFile.sources)
 
 # doNotIngest names companies and sites never to fetch, such as one that asked to be removed. A
@@ -104,11 +104,11 @@ foreach ($entry in $selected) {
   $adapterWarnings = $null
   try {
     $events = @(& (Join-Path $AdapterDir "$($entry.adapter).ps1") -Source $entry -FetchedAt $fetchedAt -WarningVariable adapterWarnings)
-    Write-TvEventFile (Join-Path $outPath "$($entry.name).json") $events
+    Write-WkEventFile (Join-Path $outPath "$($entry.name).json") $events
   } catch {
     $status = 'failed'
     $events = @()
-    $errorText = Hide-TvSecret "$_"
+    $errorText = Hide-WkSecret "$_"
     Write-Warning "$($entry.name): $errorText"
   }
   $results.Add([pscustomobject]@{
@@ -116,7 +116,7 @@ foreach ($entry in $selected) {
       Fetched  = $events.Count
       Status   = $status
       Duration = '{0:n1}s' -f $timer.Elapsed.TotalSeconds
-      Warnings = @($adapterWarnings | ForEach-Object { Hide-TvSecret "$_" })
+      Warnings = @($adapterWarnings | ForEach-Object { Hide-WkSecret "$_" })
       Error    = $errorText
       Events   = $events
     })
@@ -152,13 +152,13 @@ if ($failed -eq $results.Count) {
   exit 1
 }
 
-$previous = Read-TvRawFile $rawFile
+$previous = Read-WkRawFile $rawFile
 $asOfValue = if (($Source -or $Local) -and $previous) { $previous.asOf } elseif ($AsOf) { $AsOf } else { $fetchedAt }
 $keep = @(@($running | ForEach-Object name) + @($selected | ForEach-Object name) | Select-Object -Unique)
-$raw = Update-TvRawFile $previous -Results $results -Keep $keep -AsOf $asOfValue -FetchedAt $fetchedAt
-if (-not $NoWrite) { Write-TvRawFile $rawFile $raw }
+$raw = Update-WkRawFile $previous -Results $results -Keep $keep -AsOf $asOfValue -FetchedAt $fetchedAt
+if (-not $NoWrite) { Write-WkRawFile $rawFile $raw }
 
-$stored = @(Get-TvRawEvents $raw).Count
+$stored = @(Get-WkRawEvents $raw).Count
 $log.finishedAt = & $stamp
 $log.asOf = $asOfValue
 $log.rawSources = @($raw.sources.PSObject.Properties).Count

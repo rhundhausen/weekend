@@ -3,7 +3,7 @@
 Two cost values are involved, and only one is stored:
 
 - `priceMin`: number or null. Cheapest adult ticket, face value, before fees.
-  Source scripts work it out and pass it to `New-TvEvent`. It is never
+  Source scripts work it out and pass it to `New-WkEvent`. It is never
   stored: WeekendBoise keeps no ticket prices (see the README).
 - `costTier`: one of `free`, `$`, `$$`, `$$$`, or null (unknown). Stored on
   the event; left out when null.
@@ -62,7 +62,7 @@ migration. Archived (past) events keep the tier they had, because no price is
 stored to re-derive it from.
 
 Events stored before this scheme (fields `cost` and `costGuess`, with tiers at
-$25 and $100) are moved by refine (`Update-TvLegacyCost`): `free` and `$$$`
+$25 and $100) are moved by refine (`Update-WkLegacyCost`): `free` and `$$$`
 carry over because they mean the same under the new breakpoints; old `$`, `$$`,
 and every guess are dropped, and the next ingest gives upcoming events their
 tier again.

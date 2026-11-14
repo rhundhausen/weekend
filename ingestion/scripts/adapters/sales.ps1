@@ -56,7 +56,7 @@ param(
 . "$PSScriptRoot/../lib/Ics.ps1"
 . "$PSScriptRoot/../lib/Sales.ps1"
 
-$today = [datetime]::ParseExact((ConvertTo-BoiseTime $FetchedAt).Substring(0, 10), 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture)
+$today = [datetime]::ParseExact((ConvertTo-LocalTime $FetchedAt).Substring(0, 10), 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture)
 $months = 'Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?'
 $clock = '\d{1,2}(?::\d{2})?\s*[AaPp]\.?\s*[Mm]\b\.?'
 $dropped = @{ 'in-person' = 0; 'real-estate' = 0; city = 0 }
@@ -74,15 +74,15 @@ function Get-SalesText {
   }
 
   $uri = [uri]$Source.url
-  $robots = try { Invoke-TvRequest "$($uri.GetLeftPart('Authority'))/robots.txt" -Raw } catch {
+  $robots = try { Invoke-WkRequest "$($uri.GetLeftPart('Authority'))/robots.txt" -Raw } catch {
     # No robots.txt means no restrictions. Any other failure means we can't tell, so stop.
     if ("$_" -match 'HTTP 404') { '' } else { throw }
   }
-  if (-not (Test-TvRobotsAllowed $robots $uri.PathAndQuery)) { throw "$($Source.name): robots.txt disallows $($uri.PathAndQuery)" }
-  $delay = [Math]::Max(1, [int](Get-TvRobotsGroup $robots).Delay)
+  if (-not (Test-WkRobotsAllowed $robots $uri.PathAndQuery)) { throw "$($Source.name): robots.txt disallows $($uri.PathAndQuery)" }
+  $delay = [Math]::Max(1, [int](Get-WkRobotsGroup $robots).Delay)
   if ($delay -gt 60) { throw "$($Source.name): robots.txt asks for $delay seconds between requests" }
   Start-Sleep -Seconds $delay
-  Invoke-TvRequest $uri.AbsoluteUri -Raw
+  Invoke-WkRequest $uri.AbsoluteUri -Raw
 }
 
 function Add-Sale {
@@ -90,8 +90,8 @@ function Add-Sale {
   # counts the drop.
   param([string]$Title, [string]$Text, [string]$Town, [hashtable]$Event, [switch]$RealEstate)
 
-  $city = if ($Town) { Resolve-TvCity $Town }
-  $verdict = Get-TvSaleVerdict -Title $Title -Text $Text -HasPlace ([bool]$Town) -City $city -RealEstate ([bool]$RealEstate -and -not $Source.keepRealEstate)
+  $city = if ($Town) { Resolve-WkCity $Town }
+  $verdict = Get-WkSaleVerdict -Title $Title -Text $Text -HasPlace ([bool]$Town) -City $city -RealEstate ([bool]$RealEstate -and -not $Source.keepRealEstate)
   if ($verdict -ne 'keep') {
     $script:dropped[$verdict]++
     $why = switch ($verdict) { 'city' { "the city filter ($Town)" } 'real-estate' { 'the real estate rule' } default { 'the in-person rule' } }
@@ -99,7 +99,7 @@ function Add-Sale {
     return
   }
   try {
-    New-TvSaleEvent -Source $Source -FetchedAt $FetchedAt -City $city @Event
+    New-WkSaleEvent -Source $Source -FetchedAt $FetchedAt -City $city @Event
     $script:kept++
   } catch {
     Write-Warning "$($Source.name): skipping '$Title': $_"
@@ -115,11 +115,11 @@ function Read-IcsSales {
     $title = ConvertTo-PlainText $item.Summary
     $lines = @($item.Description -split '\r?\n' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
     $locationLine = ($lines | Where-Object { $_ -match '^LOCATION:\s*(.+)$' } | Select-Object -First 1) -replace '^LOCATION:\s*', ''
-    $town = Find-TvSaleTown (@($item.Location, $locationLine, $title, $lines[0]) -join "`n")
+    $town = Find-WkSaleTown (@($item.Location, $locationLine, $title, $lines[0]) -join "`n")
 
     $event = @{ Url = if ($item.Url) { $item.Url } else { $Source.url } }
     $at = [regex]::Match($item.Description, "(?i)\bat\s+(?<t>$clock)")
-    $start = if ($item.AllDay -and $at.Success) { ConvertTo-TvSaleTime $item.Start $at.Groups['t'].Value }
+    $start = if ($item.AllDay -and $at.Success) { ConvertTo-WkSaleTime $item.Start $at.Groups['t'].Value }
     if ($start) {
       $event.Start = $start
     } else {
@@ -159,7 +159,7 @@ function Read-CorbettSales {
     $after = @($texts | Select-Object -Skip ($titleAt + 1))
     $place = $after[-1]
     $details = @($after | Select-Object -SkipLast 1)
-    $town = Find-TvSaleTown $place
+    $town = Find-WkSaleTown $place
 
     $linkHost = if ($href -match '^https?://([^/:?#]+)') { $Matches[1].ToLowerInvariant() -replace '^www\.', '' }
     $onsite = $texts -match '(?i)^(live\s+)?on-?site$'
@@ -170,9 +170,9 @@ function Read-CorbettSales {
       continue
     }
 
-    $date = Get-TvNextDate -Month $texts[$monthAt] -Day ([int]$texts[$monthAt + 1]) -Today $today
+    $date = Get-WkNextDate -Month $texts[$monthAt] -Day ([int]$texts[$monthAt + 1]) -Today $today
     $time = $texts | Where-Object { $_ -match "^\w+day,\s*(?<t>$clock)$" } | Select-Object -First 1
-    $start = if ($time) { ConvertTo-TvSaleTime $date ($time -replace '^\w+day,\s*', '') }
+    $start = if ($time) { ConvertTo-WkSaleTime $date ($time -replace '^\w+day,\s*', '') }
     $event = @{ Title = $title; Url = $href; Start = $start ?? $date; AllDay = -not $start }
     # The card's type label ("Estate", "Real Estate") comes before the title.
     $realEstate = @($texts | Select-Object -First $titleAt) -contains 'Real Estate' -or $card -match 'auction_type-real-estate'
@@ -192,7 +192,7 @@ function Read-OnTheWaterSales {
   # A hyphen, an en dash (0x2013), an em dash (0x2014), or "to".
   $dash = "(?:-|$([char]0x2013)|$([char]0x2014)|to)"
   foreach ($match in [regex]::Matches(($blocks -join "`n"), "(?i)\b(?:mon|tues|wednes|thurs|fri|satur|sun)day,?\s+(?<m>$months)\.?\s+(?<d>\d{1,2})(?:st|nd|rd|th)?\s*[|:,]?\s*(?<open>$clock)\s*$dash\s*(?<close>$clock)")) {
-    $day = Get-TvNextDate -Month $match.Groups['m'].Value -Day ([int]$match.Groups['d'].Value) -Today $today
+    $day = Get-WkNextDate -Month $match.Groups['m'].Value -Day ([int]$match.Groups['d'].Value) -Today $today
     $hours[$day] = @{ Open = $match.Groups['open'].Value; Close = $match.Groups['close'].Value }
   }
 
@@ -201,20 +201,20 @@ function Read-OnTheWaterSales {
     $sale = [regex]::Match($line, $salePattern)
     if (-not $sale.Success) { break }
 
-    $first = Get-TvNextDate -Month $sale.Groups['m1'].Value -Day ([int]$sale.Groups['d1'].Value) -Today $today
+    $first = Get-WkNextDate -Month $sale.Groups['m1'].Value -Day ([int]$sale.Groups['d1'].Value) -Today $today
     $last = $first
     if ($sale.Groups['d2'].Success) {
       $month2 = if ($sale.Groups['m2'].Success) { $sale.Groups['m2'].Value } else { $sale.Groups['m1'].Value }
-      $last = Get-TvNextDate -Month $month2 -Day ([int]$sale.Groups['d2'].Value) -Today $today
+      $last = Get-WkNextDate -Month $month2 -Day ([int]$sale.Groups['d2'].Value) -Today $today
       if ($last -lt $first) { $last = ([datetime]$last).AddYears(1).ToString('yyyy-MM-dd') }
     }
 
     $title = $sale.Groups['title'].Value.Trim()
     $event = @{ Title = $title; Url = $Source.url }
     if ($hours[$first]) {
-      $event.Start = ConvertTo-TvSaleTime $first $hours[$first].Open
+      $event.Start = ConvertTo-WkSaleTime $first $hours[$first].Open
       $closing = $hours[$last] ?? ($last -eq $first ? $hours[$first] : $null)
-      if ($closing) { $event.End = ConvertTo-TvSaleTime $last $closing.Close }
+      if ($closing) { $event.End = ConvertTo-WkSaleTime $last $closing.Close }
     } else {
       $event.Start = $first
       $event.AllDay = $true
@@ -230,7 +230,7 @@ function Read-FileSales {
   # in-person rule and then dropped.
   param([string]$Text)
 
-  $items = try { @($Text | ConvertFrom-TvJson) } catch { throw "$($Source.name): $($Source.path) is not valid JSON: $_" }
+  $items = try { @($Text | ConvertFrom-WkJson) } catch { throw "$($Source.name): $($Source.path) is not valid JSON: $_" }
   # The file can hold listings from more than one site. Only this source's site gave permission,
   # so only entries linking to its host are read.
   $siteHost = ([uri]$Source.url).Host -replace '^www\.', ''
@@ -253,7 +253,7 @@ function Read-FileSales {
     if ($title -match '\$\s?\d') {
       $title = if ($parts) { $parts -join ' - ' } else { ($title -replace '[^.!?]*\$\s?\d[^.!?]*[.!?]?', '').Trim() }
     }
-    $town = Find-TvSaleTown "$($item.venue)"
+    $town = Find-WkSaleTown "$($item.venue)"
     if (-not $town) { $town = "$($item.city)".Trim() }
     $event = @{ Title = $title; Start = "$($item.start)"; Url = if ($item.url) { "$($item.url)" } else { $Source.url } }
     if ($item.end -and "$($item.end)" -ne "$($item.start)") { $event.End = "$($item.end)" }

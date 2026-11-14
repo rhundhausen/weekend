@@ -45,14 +45,14 @@ function Get-SeatGeekPage {
   $page = 1
   do {
     if ($page -gt 1) { Start-Sleep -Seconds 1 }
-    $result = Invoke-TvRequest "$($Source.url)?client_id=$($env:SEATGEEK_CLIENT_ID)&lat=$lat&lon=$lon&range=$($Source.radius)mi&per_page=$perPage&page=$page"
+    $result = Invoke-WkRequest "$($Source.url)?client_id=$($env:SEATGEEK_CLIENT_ID)&lat=$lat&lon=$lon&range=$($Source.radius)mi&per_page=$perPage&page=$page"
     $result
     $more = ($page * $perPage) -lt [int]$result.meta.total
     $page++
   } while ($more)
 }
 
-$pages = if ($Response) { $Response | ForEach-Object { ConvertFrom-TvJson $_ } } else { Get-SeatGeekPage }
+$pages = if ($Response) { $Response | ForEach-Object { ConvertFrom-WkJson $_ } } else { Get-SeatGeekPage }
 
 foreach ($item in ($pages | ForEach-Object { $_.events } | Where-Object { $_ })) {
   if ($item.venue.state -ne 'ID') { continue }
@@ -60,14 +60,14 @@ foreach ($item in ($pages | ForEach-Object { $_.events } | Where-Object { $_ }))
   try {
     # When the time is unknown, SeatGeek sends a placeholder of 3:30 AM on the right date.
     $allDay = [bool]$item.time_tbd -or [bool]$item.date_tbd
-    $start = if ($allDay) { $item.datetime_local.Substring(0, 10) } else { ConvertTo-BoiseTime "$($item.datetime_utc)Z" }
+    $start = if ($allDay) { $item.datetime_local.Substring(0, 10) } else { ConvertTo-LocalTime "$($item.datetime_utc)Z" }
 
     $venue = ConvertTo-PlainText $item.venue.name
-    $city = Resolve-TvCity $item.venue.city
+    $city = Resolve-WkCity $item.venue.city
     $labels = @($item.type) + @($item.taxonomies.name)
     $category = if ($item.type -and $categories.ContainsKey($item.type)) { $categories[$item.type] } else { $Source.category }
 
-    New-TvEvent -Title (ConvertTo-PlainText $item.title) -Start $start -AllDay:$allDay `
+    New-WkEvent -Title (ConvertTo-PlainText $item.title) -Start $start -AllDay:$allDay `
       -Venue ($venue ? $venue : $Source.venue) -VenueKey ($venue ? (Get-VenueKey $venue) : $Source.venueKey) -City ($city ? $city : $Source.city) `
       -Category $category -InferCategory:([bool]$Source.inferCategory) -Labels $labels -Url $item.url `
       -PriceMin ($null -ne $item.stats.lowest_price ? [decimal]$item.stats.lowest_price : $null) -Sources @(@{ name = $Source.name; url = $item.url; fetchedAt = $FetchedAt })

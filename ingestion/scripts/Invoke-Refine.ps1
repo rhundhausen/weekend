@@ -10,8 +10,8 @@
     fetchedAt. Past events stay so they can be archived. A running source with no entry in the
     raw file keeps its stored upcoming events;
   - fills in cities for events stored as Other when their own text says where they are
-    (Resolve-TvOtherCity), and moves events stored before cost tiers changed to costTier
-    (Update-TvLegacyCost);
+    (Resolve-WkOtherCity), and moves events stored before cost tiers changed to costTier
+    (Update-WkLegacyCost);
   - for upcoming events still stored as Other, reads the event page and the organizer site its
     Website link points to (lib/CityLookup.ps1), unless -SkipCityLookup, remembering what it
     found in city-lookup.json;
@@ -79,13 +79,13 @@ $cityLookupPath = Join-Path $dataDir 'city-lookup.json'
 $metaPath = Join-Path $dataDir 'meta.json'
 $outPath = [IO.Path]::GetFullPath($OutDir, $PWD.Path)
 
-$raw = Read-TvRawFile $rawFile
+$raw = Read-WkRawFile $rawFile
 if (-not $raw) {
   throw "No raw file at $rawFile. Run the ingest workflow (or Invoke-Ingest.ps1) first: refine only works from what ingest stored."
 }
-$allSources = @((Get-Content -LiteralPath $SourcesPath -Raw | ConvertFrom-TvJson).sources)
+$allSources = @((Get-Content -LiteralPath $SourcesPath -Raw | ConvertFrom-WkJson).sources)
 $refreshed = @($raw.sources.PSObject.Properties.Name)
-$rawEvents = @(Get-TvRawEvents $raw -Order @($allSources | ForEach-Object name | Where-Object { $_ }))
+$rawEvents = @(Get-WkRawEvents $raw -Order @($allSources | ForEach-Object name | Where-Object { $_ }))
 Write-Host "Raw file: asOf $($raw.asOf), $($refreshed.Count) sources, $($rawEvents.Count) events"
 
 $running = @($allSources | Where-Object { $_.status -eq 'running' } | ForEach-Object name)
@@ -94,77 +94,77 @@ foreach ($entry in $allSources) {
   if ($null -ne $entry.priority) { $priorities[$entry.name] = $entry.priority }
 }
 
-$existing = @(Read-TvEventFile $dataPath)
-$carried = @(Get-CarriedTvEvents $existing -Refreshed $refreshed -Enabled $running -Now $Now)
+$existing = @(Read-WkEventFile $dataPath)
+$carried = @(Get-CarriedWkEvents $existing -Refreshed $refreshed -Enabled $running -Now $Now)
 # Events stored before the cost tier change carry cost and costGuess; move them to costTier
 # before the merge compares tiers. A no-op once every stored file has been rewritten.
-$legacyCosts = Update-TvLegacyCost (@($rawEvents) + $carried)
+$legacyCosts = Update-WkLegacyCost (@($rawEvents) + $carried)
 # An aggregator's "Various locations" event whose title names a known venue ("... at Zoo Boise")
 # takes that venue first, so it can merge with the venue's own listing.
-$titleVenues = Resolve-TvTitleVenue (@($rawEvents) + $carried)
-$merged = @(Merge-TvEvents (@($rawEvents) + $carried) -Priorities $priorities -DropCanceled)
-Restore-TvFetchedAt $merged $existing
+$titleVenues = Resolve-WkTitleVenue (@($rawEvents) + $carried)
+$merged = @(Merge-WkEvents (@($rawEvents) + $carried) -Priorities $priorities -DropCanceled)
+Restore-WkFetchedAt $merged $existing
 
 $months = @(if (Test-Path -LiteralPath $archiveDir) { Get-ChildItem -LiteralPath $archiveDir -Filter '*.json' | Sort-Object Name })
-$archived = @($months | ForEach-Object { Read-TvEventFile $_.FullName })
-$cityFixes = Resolve-TvOtherCity $merged -Known $archived
+$archived = @($months | ForEach-Object { Read-WkEventFile $_.FullName })
+$cityFixes = Resolve-WkOtherCity $merged -Known $archived
 
 # Each event was valid when built, so a failure here is a merge bug. Never store one.
 $merged = @($merged | Where-Object {
-    $valid = Test-TvEvent $_
+    $valid = Test-WkEvent $_
     if (-not $valid) { Write-Warning "Dropping invalid event after merge: $($_.id) '$($_.title)'" }
     $valid
   })
 
 $horizon = $Now.AddDays($Days)
-$past = @($merged | Where-Object { Test-TvEventPast $_ $Now })
-$upcoming = @(Sort-TvEvents @($merged | Where-Object { -not (Test-TvEventPast $_ $Now) -and (Get-TvEventInstant $_.start) -le $horizon }))
+$past = @($merged | Where-Object { Test-WkEventPast $_ $Now })
+$upcoming = @(Sort-WkEvents @($merged | Where-Object { -not (Test-WkEventPast $_ $Now) -and (Get-WkEventInstant $_.start) -le $horizon }))
 
 # Re-clean the archive with the current rules, so a rule change reaches past months too.
 $archiveBefore = 0
 $archiveAfter = 0
 foreach ($file in $months) {
-  $stored = @(Read-TvEventFile $file.FullName)
-  $monthCosts = Update-TvLegacyCost $stored
-  $cleaned = @(Merge-TvEvents $stored -Priorities $priorities -DropCanceled)
-  $monthCities = Resolve-TvOtherCity $cleaned -Known $archived
+  $stored = @(Read-WkEventFile $file.FullName)
+  $monthCosts = Update-WkLegacyCost $stored
+  $cleaned = @(Merge-WkEvents $stored -Priorities $priorities -DropCanceled)
+  $monthCities = Resolve-WkOtherCity $cleaned -Known $archived
   $cityFixes += $monthCities
   $legacyCosts += $monthCosts
   $archiveBefore += $stored.Count
   $archiveAfter += $cleaned.Count
   if (-not $NoWrite -and ($cleaned.Count -ne $stored.Count -or $monthCities -gt 0 -or $monthCosts -gt 0)) {
-    Restore-TvFetchedAt $cleaned $stored
-    Write-TvEventFile $file.FullName @(Sort-TvEvents $cleaned)
+    Restore-WkFetchedAt $cleaned $stored
+    Write-WkEventFile $file.FullName @(Sort-WkEvents $cleaned)
   }
 }
 
 # Find cities for upcoming events still stored as Other by reading their pages. Like the link
 # check, a failure only warns, and known cities still apply when no requests are made.
-$cityState = Read-TvCityLookupState $cityLookupPath
+$cityState = Read-WkCityLookupState $cityLookupPath
 $cityBudget = if ($SkipCityLookup -or $NoWrite) { 0 } else { $CityBudgetSeconds }
 $lookup = try {
-  Invoke-TvCityLookup $upcoming -State $cityState -Now $Now -BudgetSeconds $cityBudget
+  Invoke-WkCityLookup $upcoming -State $cityState -Now $Now -BudgetSeconds $cityBudget
 } catch {
   Write-Warning "City lookup failed, events keep their stored cities: $_"
   [pscustomobject]@{ State = $cityState; Others = 0; Pages = 0; Requests = 0; Found = 0; Errors = @("$_") }
 }
 
 # Check the links that are due, then mark every upcoming event from what is known.
-$linkState = Read-TvLinkState $linksPath
+$linkState = Read-WkLinkState $linksPath
 $linkBudget = if ($SkipLinkCheck -or $NoWrite) { 0 } else { $LinkBudgetSeconds }
 # A link check failure must not cost the night's events, so it only warns.
 $links = try {
-  Invoke-TvLinkCheck $upcoming -State $linkState -Now $Now -BudgetSeconds $linkBudget
+  Invoke-WkLinkCheck $upcoming -State $linkState -Now $Now -BudgetSeconds $linkBudget
 } catch {
   Write-Warning "Link check failed, events keep their stored link flags: $_"
   [pscustomobject]@{ State = $linkState; Checked = @(); Broken = @() }
 }
 
 if (-not $NoWrite) {
-  Add-TvArchive $archiveDir $past -Priorities $priorities
-  Write-TvEventFile $dataPath $upcoming
-  Write-TvLinkState $linksPath $links.State
-  Write-TvCityLookupState $cityLookupPath $lookup.State
+  Add-WkArchive $archiveDir $past -Priorities $priorities
+  Write-WkEventFile $dataPath $upcoming
+  Write-WkLinkState $linksPath $links.State
+  Write-WkCityLookupState $cityLookupPath $lookup.State
   # Read by the website for its "as of" time: the time ingest ran for, not the time refine ran.
   # The cost tier breakpoints too, so the site's legend comes from the same config block as the tiers.
   $meta = [ordered]@{
@@ -207,7 +207,7 @@ $report = [ordered]@{
     errors   = @($lookup.Errors)
   }
   # Upcoming events per tier, so each run's email shows what the breakpoints do.
-  costTiers   = Get-TvCostTierCounts $upcoming
+  costTiers   = Get-WkCostTierCounts $upcoming
   legacyCosts = $legacyCosts
   categories  = & $countBy 'category'
   sizes       = & $countBy 'size'
@@ -220,7 +220,7 @@ $report = [ordered]@{
 }
 [IO.File]::WriteAllText((Join-Path $outPath 'refine.json'), (($report | ConvertTo-Json -Depth 5) -replace "`r`n", "`n") + "`n")
 if ($env:GITHUB_STEP_SUMMARY) {
-  Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value (ConvertTo-TvLinkSummary $links.Broken -Checked $links.Checked.Count)
+  Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value (ConvertTo-WkLinkSummary $links.Broken -Checked $links.Checked.Count)
 }
 
 Write-Host "Refine: $($upcoming.Count) upcoming, $($past.Count) past to the archive (archive $archiveBefore -> $archiveAfter before this run's additions), $cityFixes cities filled in, $titleVenues venues read from titles, $legacyCosts events moved to costTier, $($links.Checked.Count) links checked, $($links.Broken.Count) broken ($(@($links.Broken | Where-Object new).Count) new)$($NoWrite ? ' (not written)' : '')"

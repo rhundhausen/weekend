@@ -12,7 +12,7 @@
   titles starting with one of $defaultExcludes or the entry's excludeTitles (any case), as well
   as titles matching excludeTitlePattern. A blank location uses the entry's venue and city; a
   location named in venueAliases (its whole text or any comma-separated part, any case) uses
-  that canonical venue; any other is read with ConvertFrom-TvLocation.
+  that canonical venue; any other is read with ConvertFrom-WkLocation.
 .PARAMETER Source
   One entry from sources.json, with calendarId.
 .PARAMETER FetchedAt
@@ -59,7 +59,7 @@ function Get-GoogleCalendarPage {
     if ($pageToken) { $parts += "pageToken=$([uri]::EscapeDataString($pageToken))" }
     $uri = "$apiBase/$([uri]::EscapeDataString($Source.calendarId))/events?$($parts -join '&')"
     try {
-      $page = Invoke-TvRequest $uri
+      $page = Invoke-WkRequest $uri
     } catch {
       if ("$_" -match '^HTTP (403|404)\b') {
         throw "Google Calendar $($Source.calendarId) is not public or the calendar ID is wrong (HTTP $($Matches[1]))"
@@ -91,10 +91,10 @@ function Resolve-GoogleCalendarVenue([string]$Location) {
       return @{ Venue = $alias.Value; VenueKey = $key; City = $Source.city }
     }
   }
-  ConvertFrom-TvLocation $Location -Source $Source
+  ConvertFrom-WkLocation $Location -Source $Source
 }
 
-$pages = if ($Response) { $Response | ForEach-Object { ConvertFrom-TvJson $_ } } else { Get-GoogleCalendarPage }
+$pages = if ($Response) { $Response | ForEach-Object { ConvertFrom-WkJson $_ } } else { Get-GoogleCalendarPage }
 $seen = [Collections.Generic.HashSet[string]]::new()
 
 foreach ($item in ($pages | ForEach-Object { $_.items } | Where-Object { $_ })) {
@@ -104,7 +104,7 @@ foreach ($item in ($pages | ForEach-Object { $_.items } | Where-Object { $_ })) 
 
   try {
     $allDay = -not $item.start.dateTime
-    $start = if ($allDay) { $item.start.date } else { ConvertTo-BoiseTime $item.start.dateTime }
+    $start = if ($allDay) { $item.start.date } else { ConvertTo-LocalTime $item.start.dateTime }
     if (-not $seen.Add("$($item.id)|$start")) { continue }
 
     $end = $null
@@ -113,13 +113,13 @@ foreach ($item in ($pages | ForEach-Object { $_.items } | Where-Object { $_ })) 
       $last = [DateTime]::ParseExact($item.end.date, 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture).AddDays(-1).ToString('yyyy-MM-dd')
       if ($last -gt $start) { $end = $last }
     } elseif ($item.end.dateTime) {
-      $end = ConvertTo-BoiseTime $item.end.dateTime
+      $end = ConvertTo-LocalTime $item.end.dateTime
     }
 
     $location = Resolve-GoogleCalendarVenue $item.location
     $url = $item.htmlLink ? $item.htmlLink : $Source.url
 
-    New-TvEvent -Title $title -Start $start -End $end -AllDay:$allDay `
+    New-WkEvent -Title $title -Start $start -End $end -AllDay:$allDay `
       -Venue $location.Venue -VenueKey $location.VenueKey -City $location.City `
       -Category $Source.category -InferCategory:([bool]$Source.inferCategory) -Url $url `
       -Description (ConvertTo-PlainText $item.description) `

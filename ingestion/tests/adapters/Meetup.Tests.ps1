@@ -45,10 +45,10 @@ BeforeAll {
 
   # Event 6 is already in the raw file from an earlier night, so its page is not read again.
   $script:rawPath = Join-Path $TestDrive 'raw-events.json'
-  $known = New-TvEvent -Title 'Known Night' -Start '2026-11-15T18:00:00-07:00' -Venue 'Eagle Library' -City 'Eagle' -Category 'nightlife-social' `
+  $known = New-WkEvent -Title 'Known Night' -Start '2026-11-15T18:00:00-07:00' -Venue 'Eagle Library' -City 'Eagle' -Category 'nightlife-social' `
     -Url 'https://www.meetup.com/adult-board-game-night/events/6/' -Sources @(@{ name = 'meetup-board-games'; url = 'https://www.meetup.com/adult-board-game-night/events/6/'; fetchedAt = '2026-11-05T10:00:00Z' })
-  $raw = Update-TvRawFile $null -Results @([pscustomobject]@{ Name = 'meetup-board-games'; Status = 'ok'; Events = @($known) }) -Keep @('meetup-board-games') -AsOf '2026-11-05T07:00:00Z' -FetchedAt '2026-11-05T10:00:00Z'
-  Write-TvRawFile $rawPath $raw
+  $raw = Update-WkRawFile $null -Results @([pscustomobject]@{ Name = 'meetup-board-games'; Status = 'ok'; Events = @($known) }) -Keep @('meetup-board-games') -AsOf '2026-11-05T07:00:00Z' -FetchedAt '2026-11-05T10:00:00Z'
+  Write-WkRawFile $rawPath $raw
 
   # Pages in the order the adapter should ask for them: only events 1, 4, and 5.
   $script:pages = @((New-Page 'Yogurtz Grill' 'Meridian'), (New-Page 'Online event' '' 'Online'), (New-Page 'Powell''s' 'Portland'))

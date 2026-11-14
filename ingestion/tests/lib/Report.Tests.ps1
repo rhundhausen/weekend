@@ -27,9 +27,9 @@ BeforeAll {
   $script:context = @{ Outcome = 'success'; RunUrl = 'https://github.test/runs/1'; Trigger = 'schedule' }
 }
 
-Describe 'New-TvIngestReport' {
+Describe 'New-WkIngestReport' {
   BeforeAll {
-    $report = New-TvIngestReport -Run $run -Sources $sources -Context $context
+    $report = New-WkIngestReport -Run $run -Sources $sources -Context $context
   }
 
   It 'sums up the run in the subject' {
@@ -61,7 +61,7 @@ Describe 'New-TvIngestReport' {
       [pscustomobject]@{ name = 'meetup-a'; status = 'ok'; fetched = 0; duration = '1s'; warnings = @() }
       [pscustomobject]@{ name = 'meetup-b'; status = 'ok'; fetched = 4; duration = '1s'; warnings = @() }
     )
-    $text = (New-TvIngestReport -Run $runMeetup -Sources $withMeetup -Context $context).Text
+    $text = (New-WkIngestReport -Run $runMeetup -Sources $withMeetup -Context $context).Text
     $text | Should -Match 'Meetup groups: +2 ok, 1 with events, 4 events'
   }
 
@@ -94,22 +94,22 @@ Describe 'New-TvIngestReport' {
   It 'escapes HTML in source text' {
     $odd = $run | Select-Object *
     $odd.sources = @([pscustomobject]@{ name = 'good'; status = 'failed'; fetched = 0; duration = '1s'; error = '<b>bad</b> & worse'; warnings = @() })
-    (New-TvIngestReport -Run $odd -Sources $sources -Context $context).Html | Should -Match '&lt;b&gt;bad&lt;/b&gt; &amp; worse'
+    (New-WkIngestReport -Run $odd -Sources $sources -Context $context).Html | Should -Match '&lt;b&gt;bad&lt;/b&gt; &amp; worse'
   }
 
   It 'says so in the subject when the job failed' {
     $failed = @{ Outcome = 'failure'; RunUrl = 'https://github.test/runs/1'; Trigger = 'schedule' }
-    (New-TvIngestReport -Run $run -Sources $sources -Context $failed).Subject | Should -BeLikeExactly 'WeekendBoise Ingest FAILED:*'
+    (New-WkIngestReport -Run $run -Sources $sources -Context $failed).Subject | Should -BeLikeExactly 'WeekendBoise Ingest FAILED:*'
   }
 
   It 'still reports when there is no run file' {
-    $report = New-TvIngestReport -Run $null -Sources $sources -Context @{ Outcome = 'failure'; RunUrl = 'https://github.test/runs/2' }
+    $report = New-WkIngestReport -Run $null -Sources $sources -Context @{ Outcome = 'failure'; RunUrl = 'https://github.test/runs/2' }
     $report.Subject | Should -BeExactly 'WeekendBoise Ingest FAILED: no run.json'
     $report.Text | Should -Match 'https://github\.test/runs/2'
   }
 }
 
-Describe 'New-TvRefineReport' {
+Describe 'New-WkRefineReport' {
   BeforeAll {
     $refine = [pscustomobject]@{
       startedAt = '2026-11-07T07:06:00Z'; finishedAt = '2026-11-07T07:22:30Z'; asOf = '2026-11-07T07:00:00Z'
@@ -129,7 +129,7 @@ Describe 'New-TvRefineReport' {
         [pscustomobject]@{ title = 'Down Host'; start = '2026-11-22T19:00:00-07:00'; url = 'https://down.test/x'; reason = 'timeout on 2 nights'; brokenSince = '2026-11-05T07:10:00Z'; new = $false; sources = 'blocked' }
       )
     }
-    $report = New-TvRefineReport -Refine $refine -Links $links -Sources $sources -Context $context
+    $report = New-WkRefineReport -Refine $refine -Links $links -Sources $sources -Context $context
   }
 
   It 'sums up the run in the subject' {
@@ -158,20 +158,20 @@ Describe 'New-TvRefineReport' {
   It 'says when the link check was skipped' {
     $skipped = $refine | Select-Object *
     $skipped.skipLinkCheck = $true
-    (New-TvRefineReport -Refine $skipped -Links $links -Sources $sources -Context $context).Text | Should -Match 'Link check skipped'
+    (New-WkRefineReport -Refine $skipped -Links $links -Sources $sources -Context $context).Text | Should -Match 'Link check skipped'
   }
 
   It 'still reports when there is no refine file' {
-    (New-TvRefineReport -Refine $null -Links $null -Sources $sources -Context @{ Outcome = 'failure'; RunUrl = 'u' }).Subject | Should -BeExactly 'WeekendBoise Refine FAILED: no refine.json'
+    (New-WkRefineReport -Refine $null -Links $null -Sources $sources -Context @{ Outcome = 'failure'; RunUrl = 'u' }).Subject | Should -BeExactly 'WeekendBoise Refine FAILED: no refine.json'
   }
 }
 
-Describe 'Send-TvReport attachments' {
+Describe 'Send-WkReport attachments' {
   It 'sends a file as a base64 attachment' {
     $file = Join-Path $TestDrive 'out.zip'
     [IO.File]::WriteAllBytes($file, [byte[]](1, 2, 3, 250))
     Mock Invoke-RestMethod { [pscustomobject]@{ id = 'abc' } }
-    $null = Send-TvReport -Report @{ Subject = 'S'; Html = 'H'; Text = 'T' } -To 'me@test.example' -ApiKey 'k' -Attachment $file
+    $null = Send-WkReport -Report @{ Subject = 'S'; Html = 'H'; Text = 'T' } -To 'me@test.example' -ApiKey 'k' -Attachment $file
     Should -Invoke Invoke-RestMethod -Times 1 -ParameterFilter {
       $body = $Body | ConvertFrom-Json
       $body.attachments[0].filename -eq 'out.zip' -and
@@ -185,7 +185,7 @@ Describe 'Send-TvReport attachments' {
     [IO.File]::WriteAllBytes($out, [byte[]](1))
     [IO.File]::WriteAllBytes($logs, [byte[]](2))
     Mock Invoke-RestMethod { [pscustomobject]@{ id = 'abc' } }
-    $null = Send-TvReport -Report @{ Subject = 'S'; Html = 'H'; Text = 'T' } -To 'me@test.example' -ApiKey 'k' -Attachment $out, $logs
+    $null = Send-WkReport -Report @{ Subject = 'S'; Html = 'H'; Text = 'T' } -To 'me@test.example' -ApiKey 'k' -Attachment $out, $logs
     Should -Invoke Invoke-RestMethod -Times 1 -ParameterFilter {
       $body = $Body | ConvertFrom-Json
       ($body.attachments.filename -join ',') -eq 'out.zip,ingest-logs.zip'
@@ -193,15 +193,15 @@ Describe 'Send-TvReport attachments' {
   }
 
   It 'names the attachment in the report' {
-    $report = New-TvIngestReport -Run $run -Sources $sources -Context ($context + @{ Attachment = 'out.zip (415 KB)' })
+    $report = New-WkIngestReport -Run $run -Sources $sources -Context ($context + @{ Attachment = 'out.zip (415 KB)' })
     $report.Text | Should -Match 'Attached: +out\.zip \(415 KB\)'
   }
 }
 
-Describe 'Send-TvReport' {
+Describe 'Send-WkReport' {
   It 'posts the report to Resend' {
     Mock Invoke-RestMethod { [pscustomobject]@{ id = 'abc' } }
-    $null = Send-TvReport -Report @{ Subject = 'S'; Html = '<p>H</p>'; Text = 'T' } -To 'me@test.example' -ApiKey 'key123'
+    $null = Send-WkReport -Report @{ Subject = 'S'; Html = '<p>H</p>'; Text = 'T' } -To 'me@test.example' -ApiKey 'key123'
     Should -Invoke Invoke-RestMethod -Times 1 -ParameterFilter {
       $body = $Body | ConvertFrom-Json
       $Uri -eq 'https://api.resend.com/emails' -and $Method -eq 'Post' -and $Headers.Authorization -eq 'Bearer key123' -and
@@ -212,19 +212,19 @@ Describe 'Send-TvReport' {
   }
 }
 
-Describe 'Test-TvReminderDay' {
+Describe 'Test-WkReminderDay' {
   It 'is true for the scheduled run at midnight Sunday in Boise' {
     # 2026-11-08 07:00 UTC is Sunday 12:00 AM MST.
-    Test-TvReminderDay '2026-11-08T07:00:00Z' | Should -BeTrue
+    Test-WkReminderDay '2026-11-08T07:00:00Z' | Should -BeTrue
   }
 
   It 'is false on other days, including late Saturday night in Boise' {
-    Test-TvReminderDay '2026-11-07T07:00:00Z' | Should -BeFalse
-    Test-TvReminderDay '2026-11-08T06:00:00Z' | Should -BeFalse
+    Test-WkReminderDay '2026-11-07T07:00:00Z' | Should -BeFalse
+    Test-WkReminderDay '2026-11-08T06:00:00Z' | Should -BeFalse
   }
 }
 
-Describe 'New-TvLocalReminder' {
+Describe 'New-WkLocalReminder' {
   BeforeAll {
     $script:localSources = @(
       [pscustomobject]@{ name = 'good'; displayName = 'Good Venue'; status = 'running'; url = 'https://good.test/' }
@@ -238,7 +238,7 @@ Describe 'New-TvLocalReminder' {
         home = [pscustomobject]@{ fetchedAt = '2026-11-01T18:30:00Z'; events = @(1, 2, 3) }
       }
     }
-    $script:reminder = New-TvLocalReminder -Sources $localSources -Raw $raw -RunUrl 'https://github.test/runs/1'
+    $script:reminder = New-WkLocalReminder -Sources $localSources -Raw $raw -RunUrl 'https://github.test/runs/1'
   }
 
   It 'has a subject that says what to do' {
@@ -257,7 +257,7 @@ Describe 'New-TvLocalReminder' {
   }
 
   It 'says the source was never fetched when the raw file has no entry for it' {
-    $text = (New-TvLocalReminder -Sources $localSources -Raw ([pscustomobject]@{ sources = [pscustomobject]@{} })).Text
+    $text = (New-WkLocalReminder -Sources $localSources -Raw ([pscustomobject]@{ sources = [pscustomobject]@{} })).Text
     $text | Should -Match 'Home Only Hall \(home\).*never'
   }
 

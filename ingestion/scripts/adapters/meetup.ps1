@@ -54,21 +54,21 @@ function Get-MeetupText {
   }
 
   $uri = [uri]$Url
-  if ($null -eq $global:TvMeetupRobots) {
-    $global:TvMeetupRobots = try { Invoke-TvRequest "$($uri.GetLeftPart('Authority'))/robots.txt" -Raw } catch {
+  if ($null -eq $global:WkMeetupRobots) {
+    $global:WkMeetupRobots = try { Invoke-WkRequest "$($uri.GetLeftPart('Authority'))/robots.txt" -Raw } catch {
       if ("$_" -match 'HTTP 404') { '' } else { throw }
     }
   }
-  if (-not (Test-TvRobotsAllowed $global:TvMeetupRobots $uri.PathAndQuery)) { throw "robots.txt disallows $($uri.PathAndQuery)" }
+  if (-not (Test-WkRobotsAllowed $global:WkMeetupRobots $uri.PathAndQuery)) { throw "robots.txt disallows $($uri.PathAndQuery)" }
 
   # One clock for every Meetup source in this run, so back-to-back groups stay 1 second apart.
-  $delay = [Math]::Max(1, [int](Get-TvRobotsGroup $global:TvMeetupRobots).Delay)
-  if ($global:TvMeetupLastRequest) {
-    $wait = $delay * 1000 - ([DateTime]::UtcNow - $global:TvMeetupLastRequest).TotalMilliseconds
+  $delay = [Math]::Max(1, [int](Get-WkRobotsGroup $global:WkMeetupRobots).Delay)
+  if ($global:WkMeetupLastRequest) {
+    $wait = $delay * 1000 - ([DateTime]::UtcNow - $global:WkMeetupLastRequest).TotalMilliseconds
     if ($wait -gt 0) { Start-Sleep -Milliseconds ([int]$wait) }
   }
-  $global:TvMeetupLastRequest = [DateTime]::UtcNow
-  Invoke-TvRequest $Url -Raw
+  $global:WkMeetupLastRequest = [DateTime]::UtcNow
+  Invoke-WkRequest $Url -Raw
 }
 
 $text = Get-MeetupText $Source.url
@@ -79,7 +79,7 @@ $groupName = [regex]::Match($text, '(?m)^X-WR-CALNAME:(.+?)\r?$').Groups[1].Valu
 
 # Where earlier nights placed this group's events, by event URL.
 $known = @{}
-$raw = Read-TvRawFile $RawPath
+$raw = Read-WkRawFile $RawPath
 if ($raw -and $raw.sources.PSObject.Properties[$Source.name]) {
   foreach ($stored in @($raw.sources.($Source.name).events)) {
     if ($stored.url) { $known["$($stored.url)"] = $stored }
@@ -90,7 +90,7 @@ $now = [DateTimeOffset]::Parse($FetchedAt, [Globalization.CultureInfo]::Invarian
 foreach ($item in (ConvertFrom-Ics $text)) {
   if ($item.Status -eq 'CANCELLED') { continue }
   $last = if ($item.End) { $item.End } else { $item.Start }
-  if ((Get-TvEventInstant $last) -lt $now) { continue }
+  if ((Get-WkEventInstant $last) -lt $now) { continue }
 
   $title = ConvertTo-PlainText $item.Summary
   if ($Source.excludeTitlePattern -and $title -match $Source.excludeTitlePattern) { continue }
@@ -104,11 +104,11 @@ foreach ($item in (ConvertFrom-Ics $text)) {
       $city = $stored.city
     } else {
       $page = Get-MeetupText $url
-      $node = @(Get-TvJsonLdEvent $page) | Select-Object -First 1
+      $node = @(Get-WkJsonLdEvent $page) | Select-Object -First 1
       if (-not $node) { throw 'no schema.org event data on the page' }
       if ("$($node.eventAttendanceMode)" -match 'OnlineEventAttendanceMode') { continue }
       $location = @($node.location) | Where-Object { "$($_.'@type')" -ne 'VirtualLocation' } | Select-Object -First 1
-      $city = Resolve-TvCity "$($location.address.addressLocality)"
+      $city = Resolve-WkCity "$($location.address.addressLocality)"
       # Only the cities this site covers; anything else, or no place at all, is dropped.
       if (-not $city -or $city -eq 'Other') { continue }
       $venue = ConvertTo-PlainText "$($location.name)"
@@ -122,7 +122,7 @@ foreach ($item in (ConvertFrom-Ics $text)) {
     # Some groups write in Markdown: drop bold and italic marks and the backslashes that escape punctuation.
     $description = $description -replace '\\([\\`*_{}\[\]()#+\-.!|,:;~<>"''])', '$1' -replace '(?<![\w*])\*{1,3}(?=\S)|(?<=\S)\*{1,3}(?![\w*])', ''
 
-    New-TvEvent -Title $title -Start $item.Start -End $item.End -AllDay:$item.AllDay `
+    New-WkEvent -Title $title -Start $item.Start -End $item.End -AllDay:$item.AllDay `
       -Venue $venue -VenueKey $venueKey -City $city `
       -Category $Source.category -InferCategory:([bool]$Source.inferCategory) -Url $url -Description $description.Trim() `
       -Sources @(@{ name = $Source.name; url = $url; fetchedAt = $FetchedAt })

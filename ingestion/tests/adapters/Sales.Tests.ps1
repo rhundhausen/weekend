@@ -281,44 +281,44 @@ Describe 'sales adapter, file mode (EstateSales.NET)' {
   }
 }
 
-Describe 'Get-TvSaleVerdict' {
+Describe 'Get-WkSaleVerdict' {
   BeforeAll { . "$PSScriptRoot/../../scripts/lib/Sales.ps1" }
 
   It 'drops anything that says online, in any case' {
-    Get-TvSaleVerdict -Title 'Estate Auction' -Text 'Bid ONLINE now' -HasPlace $true -City 'Boise' | Should -Be 'in-person'
+    Get-WkSaleVerdict -Title 'Estate Auction' -Text 'Bid ONLINE now' -HasPlace $true -City 'Boise' | Should -Be 'in-person'
   }
 
   It 'drops a sale with no place' {
-    Get-TvSaleVerdict -Title 'Estate Auction' -Text '' -HasPlace $false -City $null | Should -Be 'in-person'
+    Get-WkSaleVerdict -Title 'Estate Auction' -Text '' -HasPlace $false -City $null | Should -Be 'in-person'
   }
 
   It 'drops a place outside the covered cities' {
-    Get-TvSaleVerdict -Title 'Estate Auction' -Text '' -HasPlace $true -City $null | Should -Be 'city'
+    Get-WkSaleVerdict -Title 'Estate Auction' -Text '' -HasPlace $true -City $null | Should -Be 'city'
   }
 
   It 'drops a real estate auction, marked by the site or named in the title' {
-    Get-TvSaleVerdict -Title 'Home and Shop' -Text '' -HasPlace $true -City 'Nampa' -RealEstate $true | Should -Be 'real-estate'
-    Get-TvSaleVerdict -Title 'Absolute Real Estate Auction' -Text '' -HasPlace $true -City 'Nampa' | Should -Be 'real-estate'
+    Get-WkSaleVerdict -Title 'Home and Shop' -Text '' -HasPlace $true -City 'Nampa' -RealEstate $true | Should -Be 'real-estate'
+    Get-WkSaleVerdict -Title 'Absolute Real Estate Auction' -Text '' -HasPlace $true -City 'Nampa' | Should -Be 'real-estate'
   }
 
   It 'keeps an estate sale whose text mentions real estate' {
-    Get-TvSaleVerdict -Title 'Estate Sale' -Text 'Ask us about real estate services' -HasPlace $true -City 'Boise' | Should -Be 'keep'
+    Get-WkSaleVerdict -Title 'Estate Sale' -Text 'Ask us about real estate services' -HasPlace $true -City 'Boise' | Should -Be 'keep'
   }
 
   It 'keeps an in-person sale in a covered city' {
-    Get-TvSaleVerdict -Title 'Estate Auction' -Text '' -HasPlace $true -City 'Valley County' | Should -Be 'keep'
+    Get-WkSaleVerdict -Title 'Estate Auction' -Text '' -HasPlace $true -City 'Valley County' | Should -Be 'keep'
   }
 }
 
-Describe 'Get-TvNextDate' {
+Describe 'Get-WkNextDate' {
   BeforeAll { . "$PSScriptRoot/../../scripts/lib/Sales.ps1" }
 
   It 'uses this year for a date ahead or just past' {
-    Get-TvNextDate -Month 'Nov' -Day 21 -Today ([datetime]'2026-11-09') | Should -Be '2026-11-21'
-    Get-TvNextDate -Month 'November' -Day 2 -Today ([datetime]'2026-11-09') | Should -Be '2026-11-02'
+    Get-WkNextDate -Month 'Nov' -Day 21 -Today ([datetime]'2026-11-09') | Should -Be '2026-11-21'
+    Get-WkNextDate -Month 'November' -Day 2 -Today ([datetime]'2026-11-09') | Should -Be '2026-11-02'
   }
 
   It 'uses next year for a date more than six months gone' {
-    Get-TvNextDate -Month 'Jan' -Day 9 -Today ([datetime]'2026-11-09') | Should -Be '2027-01-09'
+    Get-WkNextDate -Month 'Jan' -Day 9 -Today ([datetime]'2026-11-09') | Should -Be '2027-01-09'
   }
 }

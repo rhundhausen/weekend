@@ -6,7 +6,7 @@
 
 $script:LinkStamp = "yyyy-MM-dd'T'HH:mm:ss'Z'"
 
-function Get-TvLinkVerdict {
+function Get-WkLinkVerdict {
   <#
   .SYNOPSIS
     ok, broken, blocked, or transient.
@@ -32,7 +32,7 @@ function Get-TvLinkVerdict {
   'blocked'
 }
 
-function Get-TvLinkErrorKind {
+function Get-WkLinkErrorKind {
   # dns, refused, timeout, or error, from a request exception and its inner exceptions.
   param([Exception]$Exception)
 
@@ -53,7 +53,7 @@ function Get-TvLinkErrorKind {
   'error'
 }
 
-function Test-TvLink {
+function Test-WkLink {
   # One GET with the project User-Agent, following redirects. Returns Status, ErrorKind and Verdict.
   [CmdletBinding()]
   param([Parameter(Mandatory, Position = 0)][string]$Url)
@@ -62,15 +62,15 @@ function Test-TvLink {
   $kind = ''
   try {
     # Browsers follow a redirect from https to http, and PowerShell refuses it unless told to.
-    $response = Invoke-WebRequest -Uri $Url -UserAgent (Get-TvUserAgent) -MaximumRedirection 10 -TimeoutSec 20 -SkipHttpErrorCheck -AllowInsecureRedirect -ErrorAction Stop
+    $response = Invoke-WebRequest -Uri $Url -UserAgent (Get-WkUserAgent) -MaximumRedirection 10 -TimeoutSec 20 -SkipHttpErrorCheck -AllowInsecureRedirect -ErrorAction Stop
     $status = [int]$response.StatusCode
   } catch {
-    $kind = Get-TvLinkErrorKind $_.Exception
+    $kind = Get-WkLinkErrorKind $_.Exception
   }
-  @{ Status = $status; ErrorKind = $kind; Verdict = (Get-TvLinkVerdict -Status $status -ErrorKind $kind) }
+  @{ Status = $status; ErrorKind = $kind; Verdict = (Get-WkLinkVerdict -Status $status -ErrorKind $kind) }
 }
 
-function Test-TvLinkEntryBroken {
+function Test-WkLinkEntryBroken {
   # A 404 or 410, or a transient failure 2 nights in a row. A broken link stays broken through a
   # transient failure, since that says nothing new.
   param([object]$Entry)
@@ -79,7 +79,7 @@ function Test-TvLinkEntryBroken {
   $Entry.verdict -eq 'broken' -or ($Entry.verdict -eq 'transient' -and ([int]$Entry.failures -ge 2 -or $Entry.brokenSince))
 }
 
-function Get-TvLinkReason {
+function Get-WkLinkReason {
   param([object]$Entry)
 
   $what = if ($Entry.error) { $Entry.error } else { "HTTP $($Entry.status)" }
@@ -87,7 +87,7 @@ function Get-TvLinkReason {
   "$what, $([Math]::Max(2, [int]$Entry.failures)) nights in a row"
 }
 
-function Invoke-TvLinkCheck {
+function Invoke-WkLinkCheck {
   <#
   .SYNOPSIS
     Checks the event links that are due, then marks events whose link is broken.
@@ -103,7 +103,7 @@ function Invoke-TvLinkCheck {
     checked and works. Otherwise it gets linkBroken = true. Entries for links no event has used
     for 30 days are dropped.
   .PARAMETER State
-    URL to entry (verdict, status, error, checkedAt, brokenSince, failures), from Read-TvLinkState.
+    URL to entry (verdict, status, error, checkedAt, brokenSince, failures), from Read-WkLinkState.
     It is updated in place and returned.
   .PARAMETER OnlySource
     Check only links of events this source reported. Known results still apply to every event.
@@ -160,7 +160,7 @@ function Invoke-TvLinkCheck {
     }
     if ($Result.ErrorKind) { $entry.error = $Result.ErrorKind }
     if ($Result.Verdict -eq 'transient' -and $previous.brokenSince) { $entry.brokenSince = $previous.brokenSince }
-    if (Test-TvLinkEntryBroken $entry) {
+    if (Test-WkLinkEntryBroken $entry) {
       $entry.brokenSince = if ($previous.brokenSince) { $previous.brokenSince } else { $nowText }
     }
     $State[$Url] = $entry
@@ -177,19 +177,19 @@ function Invoke-TvLinkCheck {
     if (-not $robots.ContainsKey($origin)) {
       $delays[$origin] = 1
       Wait-Host $origin
-      $text = try { Invoke-TvRequest "$origin/robots.txt" -Raw } catch {
+      $text = try { Invoke-WkRequest "$origin/robots.txt" -Raw } catch {
         # No robots.txt means no rules. A host that doesn't resolve, refuses or times out is down,
         # which counts against its links. Any other answer means we can't tell, so leave it alone.
         $message = "$_"
         if ($message -match 'HTTP 40[14]|HTTP 410') { '' }
         else {
-          $kind = if ($message -notmatch 'HTTP \d{3}') { Get-TvLinkErrorKind $_.Exception }
+          $kind = if ($message -notmatch 'HTTP \d{3}') { Get-WkLinkErrorKind $_.Exception }
           if ($kind -in 'dns', 'refused', 'timeout') { $down[$origin] = $kind }
           $null
         }
       }
       $robots[$origin] = $text
-      if ($null -ne $text) { $delays[$origin] = [Math]::Max(1, [int](Get-TvRobotsGroup $text).Delay) }
+      if ($null -ne $text) { $delays[$origin] = [Math]::Max(1, [int](Get-WkRobotsGroup $text).Delay) }
     }
     if ($down.ContainsKey($origin)) {
       Save-Result $Url @{ Status = 0; ErrorKind = $down[$origin]; Verdict = 'transient' } $Names $Title
@@ -198,14 +198,14 @@ function Invoke-TvLinkCheck {
     $rules = $robots[$origin]
     if ($null -eq $rules -or $delays[$origin] -gt 60) { return $true }
 
-    if (-not (Test-TvRobotsAllowed $rules $uri.PathAndQuery)) {
+    if (-not (Test-WkRobotsAllowed $rules $uri.PathAndQuery)) {
       $State[$Url] = [ordered]@{ verdict = 'skipped'; status = 0; checkedAt = $nowText; failures = 0 }
       $checked.Add([pscustomobject]@{ url = $Url; verdict = 'skipped'; status = 0; error = 'robots.txt disallows'; sources = $Names; title = $Title })
       return $true
     }
 
     Wait-Host $origin
-    Save-Result $Url (Test-TvLink $Url) $Names $Title
+    Save-Result $Url (Test-WkLink $Url) $Names $Title
     $true
   }
 
@@ -215,7 +215,7 @@ function Invoke-TvLinkCheck {
     if (-not $event.url) { continue }
     $names = @($event.sources | ForEach-Object name)
     if ($OnlySource -and $OnlySource -notin $names) { continue }
-    $instant = Get-TvEventInstant $event.start
+    $instant = Get-WkEventInstant $event.start
     $known = $byUrl[$event.url]
     if (-not $known -or $instant -lt $known.Instant) {
       $byUrl[$event.url] = [pscustomobject]@{ Url = $event.url; Instant = $instant; Names = ($names -join ', '); Title = $event.title }
@@ -230,7 +230,7 @@ function Invoke-TvLinkCheck {
   $broken = [Collections.Generic.List[object]]::new()
   foreach ($event in $Events) {
     $entry = $State[$event.url]
-    if (-not (Test-TvLinkEntryBroken $entry)) {
+    if (-not (Test-WkLinkEntryBroken $entry)) {
       if ($event.PSObject.Properties['linkBroken']) { $event.PSObject.Properties.Remove('linkBroken') }
       continue
     }
@@ -256,7 +256,7 @@ function Invoke-TvLinkCheck {
         start       = $event.start
         url         = $event.url
         sources     = $names
-        reason      = Get-TvLinkReason $entry
+        reason      = Get-WkLinkReason $entry
         brokenSince = $entry.brokenSince
         new         = $entry.brokenSince -eq $nowText
       })
@@ -277,7 +277,7 @@ function Invoke-TvLinkCheck {
   [pscustomobject]@{ State = $State; Checked = @($checked); Broken = @($broken) }
 }
 
-function Read-TvLinkState {
+function Read-WkLinkState {
   # data/links.json as URL to entry. A missing file is an empty state.
   [CmdletBinding()]
   param([Parameter(Mandatory, Position = 0)][string]$Path)
@@ -286,7 +286,7 @@ function Read-TvLinkState {
   if (-not (Test-Path -LiteralPath $Path)) { return $state }
   $text = Get-Content -LiteralPath $Path -Raw
   if ([string]::IsNullOrWhiteSpace($text)) { return $state }
-  $links = (ConvertFrom-TvJson $text).links
+  $links = (ConvertFrom-WkJson $text).links
   foreach ($property in @($links.PSObject.Properties)) {
     $entry = [ordered]@{}
     foreach ($field in $property.Value.PSObject.Properties) { $entry[$field.Name] = $field.Value }
@@ -295,7 +295,7 @@ function Read-TvLinkState {
   $state
 }
 
-function Write-TvLinkState {
+function Write-WkLinkState {
   # Sorted by URL, fields in a fixed order, 2-space JSON with LF, so nightly diffs stay small.
   [CmdletBinding()]
   param(
@@ -310,7 +310,7 @@ function Write-TvLinkState {
     foreach ($field in 'verdict', 'status', 'error', 'checkedAt', 'brokenSince', 'failures') {
       if ($null -ne $entry[$field] -and "$($entry[$field])" -ne '') { $out[$field] = $entry[$field] }
     }
-    # ConvertFrom-TvJson reads every number as a double, which would write back as 200.0.
+    # ConvertFrom-WkJson reads every number as a double, which would write back as 200.0.
     if ($out.Contains('status')) { $out.status = [int]$out.status }
     $out.failures = [int]$entry.failures
     $links[$url] = $out
@@ -319,7 +319,7 @@ function Write-TvLinkState {
   [IO.File]::WriteAllText($Path, ($json -replace "`r`n", "`n") + "`n", [Text.UTF8Encoding]::new($false))
 }
 
-function ConvertTo-TvLinkSummary {
+function ConvertTo-WkLinkSummary {
   # Markdown for the GitHub Actions run summary: broken links grouped by source, new ones first.
   [CmdletBinding()]
   [OutputType([string])]

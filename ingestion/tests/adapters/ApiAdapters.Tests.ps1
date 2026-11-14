@@ -80,11 +80,11 @@ Describe 'eventbrite adapter' {
   It 'sends the token as a header and follows continuation' {
     $saved = $env:EVENTBRITE_TOKEN
     $env:EVENTBRITE_TOKEN = 'SECRET'
-    $global:TvApiRequests = [System.Collections.Generic.List[object]]::new()
+    $global:WkApiRequests = [System.Collections.Generic.List[object]]::new()
     try {
       Mock Invoke-WebRequest {
-        $global:TvApiRequests.Add([pscustomobject]@{ Uri = "$Uri"; Auth = $Headers.Authorization })
-        if ($global:TvApiRequests.Count -eq 1) {
+        $global:WkApiRequests.Add([pscustomobject]@{ Uri = "$Uri"; Auth = $Headers.Authorization })
+        if ($global:WkApiRequests.Count -eq 1) {
           New-FakeResponse 200 '{"pagination":{"has_more_items":true,"continuation":"NEXT"},"events":[]}'
         } else {
           New-FakeResponse 200 '{"pagination":{"has_more_items":false},"events":[]}'
@@ -93,14 +93,14 @@ Describe 'eventbrite adapter' {
       Mock Start-Sleep {}
       $listed = New-TestSource 'eventbrite' @{ organizationIds = @('123') }
       $null = & (Join-Path $repo 'scripts/adapters/eventbrite.ps1') -Source $listed -FetchedAt $fetchedAt
-      $global:TvApiRequests.Count | Should -Be 2
-      $global:TvApiRequests[0].Uri | Should -BeLike 'https://api.test/v1/organizations/123/events/*'
-      $global:TvApiRequests[0].Uri | Should -Not -Match 'SECRET'
-      $global:TvApiRequests[0].Auth | Should -Be 'Bearer SECRET'
-      $global:TvApiRequests[1].Uri | Should -Match 'continuation=NEXT'
+      $global:WkApiRequests.Count | Should -Be 2
+      $global:WkApiRequests[0].Uri | Should -BeLike 'https://api.test/v1/organizations/123/events/*'
+      $global:WkApiRequests[0].Uri | Should -Not -Match 'SECRET'
+      $global:WkApiRequests[0].Auth | Should -Be 'Bearer SECRET'
+      $global:WkApiRequests[1].Uri | Should -Match 'continuation=NEXT'
     } finally {
       $env:EVENTBRITE_TOKEN = $saved
-      Remove-Variable -Name TvApiRequests -Scope Global -ErrorAction SilentlyContinue
+      Remove-Variable -Name WkApiRequests -Scope Global -ErrorAction SilentlyContinue
     }
   }
 }
@@ -255,16 +255,16 @@ Describe 'googlecalendar adapter' {
   It 'asks for expanded instances over the next 90 days in Mountain time, and pages' {
     $saved = $env:GOOGLE_CALENDAR_API_KEY
     $env:GOOGLE_CALENDAR_API_KEY = 'SECRET'
-    $global:TvApiRequests = [System.Collections.Generic.List[object]]::new()
+    $global:WkApiRequests = [System.Collections.Generic.List[object]]::new()
     try {
       Mock Invoke-WebRequest {
-        $global:TvApiRequests.Add(([uri]$Uri).AbsoluteUri)
-        if ($global:TvApiRequests.Count -eq 1) { New-FakeResponse 200 '{"items":[],"nextPageToken":"NEXT TOKEN"}' }
+        $global:WkApiRequests.Add(([uri]$Uri).AbsoluteUri)
+        if ($global:WkApiRequests.Count -eq 1) { New-FakeResponse 200 '{"items":[],"nextPageToken":"NEXT TOKEN"}' }
         else { New-FakeResponse 200 '{"items":[]}' }
       }
       $null = & (Join-Path $repo 'scripts/adapters/googlecalendar.ps1') -Source $gcSource -FetchedAt $fetchedAt
-      $global:TvApiRequests.Count | Should -Be 2
-      $first = $global:TvApiRequests[0]
+      $global:WkApiRequests.Count | Should -Be 2
+      $first = $global:WkApiRequests[0]
       $first | Should -BeLike 'https://www.googleapis.com/calendar/v3/calendars/examplelibrary%40gmail.com/events?*'
       $first | Should -Match 'singleEvents=true'
       $first | Should -Match 'orderBy=startTime'
@@ -275,10 +275,10 @@ Describe 'googlecalendar adapter' {
       $to = [DateTimeOffset]::Parse($query['timeMax'], [Globalization.CultureInfo]::InvariantCulture)
       ($to - $from).TotalDays | Should -Be 90
       [Math]::Abs(([DateTimeOffset]::UtcNow - $from).TotalMinutes) | Should -BeLessThan 5
-      $global:TvApiRequests[1] | Should -Match 'pageToken=NEXT%20TOKEN'
+      $global:WkApiRequests[1] | Should -Match 'pageToken=NEXT%20TOKEN'
     } finally {
       $env:GOOGLE_CALENDAR_API_KEY = $saved
-      Remove-Variable -Name TvApiRequests -Scope Global -ErrorAction SilentlyContinue
+      Remove-Variable -Name WkApiRequests -Scope Global -ErrorAction SilentlyContinue
     }
   }
 
@@ -375,7 +375,7 @@ Describe 'ticketmaster area search' {
   }
 }
 
-Describe 'Hide-TvSecret for the new credentials' {
+Describe 'Hide-WkSecret for the new credentials' {
   BeforeAll {
     . (Join-Path $repo 'scripts/lib/Http.ps1')
   }
@@ -384,6 +384,6 @@ Describe 'Hide-TvSecret for the new credentials' {
     @{ name = 'client_id'; text = 'https://x.test/e?client_id=SECRET&page=1' }
     @{ name = 'token'; text = 'https://x.test/e?token=SECRET' }
   ) {
-    Hide-TvSecret $text | Should -Not -Match 'SECRET'
+    Hide-WkSecret $text | Should -Not -Match 'SECRET'
   }
 }

@@ -43,7 +43,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 1
-          sparse-checkout: ingestion/scripts/Test-BoiseHour.ps1
+          sparse-checkout: ingestion/scripts/Test-LocalHour.ps1
           sparse-checkout-cone-mode: false
 
       # A manual run always goes ahead. A scheduled run goes ahead only for the cron line that is
@@ -54,7 +54,7 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           SCHEDULE: ${{ github.event.schedule }}
-        run: ./ingestion/scripts/Test-BoiseHour.ps1 -Hour 0
+        run: ./ingestion/scripts/Test-LocalHour.ps1 -Hour 0
 
   ingest:
     needs: when

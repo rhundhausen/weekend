@@ -10,7 +10,7 @@ BeforeAll {
 param([pscustomobject]`$Source, [string]`$FetchedAt)
 . '$schemaLib'
 if (`$Source.url -match 'fail') { throw 'feed is down' }
-New-TvEvent -Title "`$(`$Source.displayName) Night" -Start '2026-11-20T19:00:00-07:00' -Venue `$Source.venue -City `$Source.city ``
+New-WkEvent -Title "`$(`$Source.displayName) Night" -Start '2026-11-20T19:00:00-07:00' -Venue `$Source.venue -City `$Source.city ``
   -Category `$Source.category -Url "`$(`$Source.url)/e" -Sources @(@{ name = `$Source.name; url = "`$(`$Source.url)/e"; fetchedAt = `$FetchedAt })
 "@
 
@@ -46,7 +46,7 @@ Describe 'Invoke-Ingest' {
 
   It 'writes every source and the scheduled asOf to the raw file' {
     Invoke-TestIngest @{ AsOf = '2026-11-06T07:00:00Z' } | Should -Be 0
-    $raw = Read-TvRawFile $rawPath
+    $raw = Read-WkRawFile $rawPath
     $raw.asOf | Should -BeExactly '2026-11-06T07:00:00Z'
     @($raw.sources.PSObject.Properties.Name) | Should -Be @('alpha', 'beta')
     $raw.sources.alpha.events[0].title | Should -Be 'ALPHA Night'
@@ -54,14 +54,14 @@ Describe 'Invoke-Ingest' {
 
   It 'records the run time as asOf for a manual run' {
     Invoke-TestIngest | Should -Be 0
-    (Read-TvRawFile $rawPath).asOf | Should -Match '^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$'
+    (Read-WkRawFile $rawPath).asOf | Should -Match '^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$'
   }
 
   It 'merges a one-source run into the raw file and keeps its asOf' {
     Invoke-TestIngest @{ AsOf = '2026-11-06T07:00:00Z' } | Should -Be 0
     $script:sourcesPath = Write-Sources @(@{ name = 'alpha'; url = 'https://alpha2.test' }, @{ name = 'beta' })
     Invoke-TestIngest @{ Source = 'alpha' } | Should -Be 0
-    $raw = Read-TvRawFile $rawPath
+    $raw = Read-WkRawFile $rawPath
     $raw.asOf | Should -BeExactly '2026-11-06T07:00:00Z'
     $raw.sources.alpha.events[0].url | Should -Be 'https://alpha2.test/e'
     $raw.sources.beta.events[0].url | Should -Be 'https://beta.test/e'
@@ -71,7 +71,7 @@ Describe 'Invoke-Ingest' {
     Invoke-TestIngest | Should -Be 0
     $script:sourcesPath = Write-Sources @(@{ name = 'alpha'; url = 'https://fail.test' }, @{ name = 'beta' })
     Invoke-TestIngest | Should -Be 0
-    (Read-TvRawFile $rawPath).sources.alpha.events[0].url | Should -Be 'https://alpha.test/e'
+    (Read-WkRawFile $rawPath).sources.alpha.events[0].url | Should -Be 'https://alpha.test/e'
     $run = Get-Content (Join-Path $TestDrive 'out' 'run.json') -Raw | ConvertFrom-Json
     ($run.sources | Where-Object name -eq 'alpha').status | Should -Be 'failed'
   }
@@ -101,7 +101,7 @@ Describe 'Invoke-Ingest' {
     Invoke-TestIngest | Should -Be 0
     $script:sourcesPath = Write-Sources @(@{ name = 'alpha' }, @{ name = 'beta'; status = 'investigating' })
     Invoke-TestIngest | Should -Be 0
-    @((Read-TvRawFile $rawPath).sources.PSObject.Properties.Name) | Should -Be @('alpha')
+    @((Read-WkRawFile $rawPath).sources.PSObject.Properties.Name) | Should -Be @('alpha')
   }
 
   Context 'local sources' {
@@ -115,7 +115,7 @@ Describe 'Invoke-Ingest' {
       Invoke-TestIngest @{ AsOf = '2026-11-06T07:00:00Z' } | Should -Be 0
       $run = Get-Content (Join-Path $TestDrive 'out' 'run.json') -Raw | ConvertFrom-Json
       @($run.sources.name) | Should -Be @('alpha')
-      $raw = Read-TvRawFile $rawPath
+      $raw = Read-WkRawFile $rawPath
       $raw.sources.home.events[0].url | Should -Be 'https://home.test/e'
       $raw.asOf | Should -BeExactly '2026-11-06T07:00:00Z'
     }
@@ -125,7 +125,7 @@ Describe 'Invoke-Ingest' {
       Invoke-TestIngest @{ Local = $true } | Should -Be 0
       $run = Get-Content (Join-Path $TestDrive 'out' 'run.json') -Raw | ConvertFrom-Json
       @($run.sources.name) | Should -Be @('home')
-      $raw = Read-TvRawFile $rawPath
+      $raw = Read-WkRawFile $rawPath
       $raw.asOf | Should -BeExactly '2026-11-06T07:00:00Z'
       @($raw.sources.PSObject.Properties.Name) | Should -Be @('alpha', 'home')
     }
@@ -138,7 +138,7 @@ Describe 'Invoke-Ingest' {
       Invoke-TestIngest | Should -Be 0
       $run = Get-Content (Join-Path $TestDrive 'out' 'run.json') -Raw | ConvertFrom-Json
       @($run.sources.name) | Should -Be @('alpha')
-      @((Read-TvRawFile $rawPath).sources.PSObject.Properties.Name) | Should -Be @('alpha')
+      @((Read-WkRawFile $rawPath).sources.PSObject.Properties.Name) | Should -Be @('alpha')
     }
 
     It 'matches a display name ignoring case, or a site with or without www' {

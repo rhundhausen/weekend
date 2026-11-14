@@ -35,7 +35,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib' 'Report.ps1')
 . (Join-Path $PSScriptRoot 'lib' 'Raw.ps1')
 
-if (-not $Force -and ($Trigger -ne 'schedule' -or -not (Test-TvReminderDay $At))) {
+if (-not $Force -and ($Trigger -ne 'schedule' -or -not (Test-WkReminderDay $At))) {
   Write-Host 'Not the scheduled Sunday run, so no local ingest reminder'
   exit 0
 }
@@ -45,8 +45,8 @@ if (-not @($sources | Where-Object { $_.status -eq 'running' -and $_.local }).Co
   Write-Host 'No running local sources, so no reminder'
   exit 0
 }
-$raw = Read-TvRawFile ([IO.Path]::GetFullPath($RawPath, $PWD.Path))
-$reminder = New-TvLocalReminder -Sources $sources -Raw $raw -RunUrl $RunUrl
+$raw = Read-WkRawFile ([IO.Path]::GetFullPath($RawPath, $PWD.Path))
+$reminder = New-WkLocalReminder -Sources $sources -Raw $raw -RunUrl $RunUrl
 
 if ($PreviewPath) {
   [IO.File]::WriteAllText("$PreviewPath.txt", $reminder.Text)
@@ -58,5 +58,5 @@ if (-not $env:RESEND_API_KEY -or -not $env:REPORT_EMAIL) {
   Write-Warning 'RESEND_API_KEY or REPORT_EMAIL is not set, so the reminder was not emailed'
   exit 0
 }
-$sent = Send-TvReport -Report $reminder -To $env:REPORT_EMAIL -ApiKey $env:RESEND_API_KEY
+$sent = Send-WkReport -Report $reminder -To $env:REPORT_EMAIL -ApiKey $env:RESEND_API_KEY
 Write-Host "Emailed '$($reminder.Subject)' (Resend id $($sent.id))"

@@ -1,6 +1,6 @@
 # Cost tiers: free, $, $$, $$$, or unknown. See docs/cost-tiers.md.
 #
-# Adapters work out priceMin (the cheapest adult ticket, face value) and pass it to New-TvEvent,
+# Adapters work out priceMin (the cheapest adult ticket, face value) and pass it to New-WkEvent,
 # which derives costTier with Get-CostTier. Only the tier is stored, never the price.
 
 # The one place the breakpoints live. Retune them here: free is $0, $ is under Low, $$ is Low up
@@ -25,7 +25,7 @@ function Get-CostTier {
   '$$$'
 }
 
-function ConvertFrom-TvPriceText {
+function ConvertFrom-WkPriceText {
   <#
   .SYNOPSIS
     The cheapest adult ticket in a source's price text, as priceMin, or $null.
@@ -82,7 +82,7 @@ function ConvertFrom-TvPriceText {
   $null
 }
 
-function Update-TvLegacyCost {
+function Update-WkLegacyCost {
   <#
   .SYNOPSIS
     Moves events stored before 2026-11-06 to costTier. Returns how many changed.
@@ -111,7 +111,7 @@ function Update-TvLegacyCost {
   $changed
 }
 
-function Get-TvCostTierCounts {
+function Get-WkCostTierCounts {
   # How many events are in each tier, plus unknown, for refine's report.
   param([Parameter(Mandatory, Position = 0)][AllowEmptyCollection()][object[]]$Events)
 

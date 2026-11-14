@@ -1,5 +1,5 @@
 # Finds the city of events stored as Other by reading their pages: the event's own page, then the
-# organizer's site its "Website" link points to. Refine runs it after Resolve-TvOtherCity, which
+# organizer's site its "Website" link points to. Refine runs it after Resolve-WkOtherCity, which
 # only reads the event's own text. Results are kept in data/city-lookup.json, so a page is read
 # again only when its answer is old.
 
@@ -9,13 +9,13 @@
 
 # Sites that never say where one event is: social networks that refuse scripts, and chains
 # whose event pages cover every store.
-$script:TvCityLookupSkipHosts = @(
+$script:WkCityLookupSkipHosts = @(
   'facebook.com', 'fb.me', 'instagram.com', 'x.com', 'twitter.com', 'tiktok.com', 'youtube.com',
   'homedepot.com', 'lowes.com', 'jcpenney.com', 'michaels.com', 'barnesandnoble.com',
   'eventbrite.com', 'linktr.ee', 'docs.google.com', 'forms.gle'
 )
 
-function Find-TvAddressCity {
+function Find-WkAddressCity {
   <#
   .SYNOPSIS
     The one city a page's addresses name, or $null.
@@ -30,10 +30,10 @@ function Find-TvAddressCity {
   if (-not $Html) { return $null }
   $found = [Collections.Generic.HashSet[string]]::new()
 
-  foreach ($node in @(Get-TvJsonLdEvent $Html)) {
+  foreach ($node in @(Get-WkJsonLdEvent $Html)) {
     foreach ($location in @($node.location)) {
       $locality = if ($location.address -is [string]) { '' } else { "$($location.address.addressLocality)" }
-      $city = Resolve-TvCity $locality
+      $city = Resolve-WkCity $locality
       if ($city -and $city -ne 'Other') { $null = $found.Add($city) }
     }
   }
@@ -42,19 +42,19 @@ function Find-TvAddressCity {
   # not the event's, so they are left out. Footers stay: an organizer's own address is often there.
   $text = $Html -replace '(?is)<(script|style|nav|header)\b[^>]*>.*?</\1>', ' ' -replace '<[^>]+>', ' '
   $text = [Net.WebUtility]::HtmlDecode($text) -replace '\s+', ' '
-  $names = (Get-TvCityNames | ForEach-Object { [regex]::Escape($_) }) -join '|'
+  $names = (Get-WkCityNames | ForEach-Object { [regex]::Escape($_) }) -join '|'
   foreach ($match in [regex]::Matches($text, "(?i)\b($names)\s*,?\s+(ID|Idaho)\b")) {
-    $null = $found.Add((Get-TvCityNames | Where-Object { $_ -eq $match.Groups[1].Value } | Select-Object -First 1))
+    $null = $found.Add((Get-WkCityNames | Where-Object { $_ -eq $match.Groups[1].Value } | Select-Object -First 1))
   }
   foreach ($match in [regex]::Matches($text, '\b(?:ID|Idaho)\s+(83\d{3})\b')) {
-    $city = $script:TvZipCities[$match.Groups[1].Value]
+    $city = $script:WkZipCities[$match.Groups[1].Value]
     if ($city) { $null = $found.Add($city) }
   }
 
   if ($found.Count -eq 1) { @($found)[0] } else { $null }
 }
 
-function Get-TvEventWebsite {
+function Get-WkEventWebsite {
   # The "Website" link of a The Events Calendar event page, or $null.
   param([Parameter(Position = 0)][AllowEmptyString()][string]$Html)
 
@@ -62,7 +62,7 @@ function Get-TvEventWebsite {
   if ($match.Success) { [Net.WebUtility]::HtmlDecode($match.Groups[1].Value) }
 }
 
-function Get-TvEventPlaceText {
+function Get-WkEventPlaceText {
   # The parts of an event page that describe this event's place: the venue block of a The Events
   # Calendar page, and schema.org Event data. Never the whole page, whose footer often names the
   # listing site's own city.
@@ -78,17 +78,17 @@ function Get-TvEventPlaceText {
   $parts -join "`n"
 }
 
-function Test-TvSkipHost {
+function Test-WkSkipHost {
   param([uri]$Uri)
 
   $hostName = $Uri.Host.ToLowerInvariant() -replace '^www\.', ''
-  foreach ($skip in $script:TvCityLookupSkipHosts) {
+  foreach ($skip in $script:WkCityLookupSkipHosts) {
     if ($hostName -eq $skip -or $hostName.EndsWith(".$skip")) { return $true }
   }
   $false
 }
 
-function Invoke-TvCityLookup {
+function Invoke-WkCityLookup {
   <#
   .SYNOPSIS
     Sets the city on upcoming events stored as Other by reading their pages. Returns the state
@@ -96,7 +96,7 @@ function Invoke-TvCityLookup {
   .DESCRIPTION
     For each event link that is due, it reads the event page. The venue block or schema.org data
     there wins. Otherwise it follows the page's Website link and reads the organizer's page, then
-    that site's home page, and takes the city if exactly one is named (Find-TvAddressCity).
+    that site's home page, and takes the city if exactly one is named (Find-WkAddressCity).
 
     A link is due when it has no entry, 30 days after a city was found, and 7 days after none was.
     A remembered city is applied without a request. Each host's robots.txt is read once per run
@@ -106,7 +106,7 @@ function Invoke-TvCityLookup {
   .PARAMETER State
     Event URL to entry (city, website, checkedAt), from data/city-lookup.json. Updated in place.
   .PARAMETER Fetch
-    Returns a page's HTML for a URL, or throws. Defaults to Invoke-TvRequest. Used by tests.
+    Returns a page's HTML for a URL, or throws. Defaults to Invoke-WkRequest. Used by tests.
   #>
   [CmdletBinding()]
   param(
@@ -115,7 +115,7 @@ function Invoke-TvCityLookup {
     [Parameter(Mandatory)][DateTimeOffset]$Now,
     [int]$BudgetSeconds = 180,
     [double]$MinDelaySeconds = 1,
-    [scriptblock]$Fetch = { param([string]$Url) Invoke-TvRequest $Url -Raw }
+    [scriptblock]$Fetch = { param([string]$Url) Invoke-WkRequest $Url -Raw }
   )
 
   $invariant = [Globalization.CultureInfo]::InvariantCulture
@@ -135,7 +135,7 @@ function Invoke-TvCityLookup {
     if ($pages.ContainsKey($Url)) { return $pages[$Url] }
     $uri = $null
     if (-not [uri]::TryCreate($Url, [UriKind]::Absolute, [ref]$uri) -or $uri.Scheme -notin 'http', 'https') { return '' }
-    if (Test-TvSkipHost $uri) { return '' }
+    if (Test-WkSkipHost $uri) { return '' }
     $origin = $uri.GetLeftPart('Authority')
     $wait = {
       if ($lastRequest.ContainsKey($origin)) {
@@ -153,11 +153,11 @@ function Invoke-TvCityLookup {
         # No robots.txt means no rules. Anything else means we can't tell, so the host is left alone.
         if ("$_" -match 'HTTP 40[14]|HTTP 410') { '' } else { $null }
       }
-      if ($null -ne $robots[$origin]) { $delays[$origin] = [Math]::Max($MinDelaySeconds, [double](Get-TvRobotsGroup $robots[$origin]).Delay) }
+      if ($null -ne $robots[$origin]) { $delays[$origin] = [Math]::Max($MinDelaySeconds, [double](Get-WkRobotsGroup $robots[$origin]).Delay) }
     }
     $rules = $robots[$origin]
     $path = $uri.GetLeftPart('Query')
-    if ($null -eq $rules -or $delays[$origin] -gt 60 -or -not (Test-TvRobotsAllowed $rules ([uri]$path).PathAndQuery) -or (& $outOfTime)) {
+    if ($null -eq $rules -or $delays[$origin] -gt 60 -or -not (Test-WkRobotsAllowed $rules ([uri]$path).PathAndQuery) -or (& $outOfTime)) {
       return ''
     }
     & $wait
@@ -187,14 +187,14 @@ function Invoke-TvCityLookup {
     $counts.Pages++
 
     $entry = [ordered]@{}
-    $city = Find-TvAddressCity (Get-TvEventPlaceText $page)
-    $website = Get-TvEventWebsite $page
+    $city = Find-WkAddressCity (Get-WkEventPlaceText $page)
+    $website = Get-WkEventWebsite $page
     if ($website) { $entry.website = $website }
     if (-not $city -and $website) {
-      $city = Find-TvAddressCity "$(& $get $website)"
+      $city = Find-WkAddressCity "$(& $get $website)"
       $siteUri = $null
       if (-not $city -and [uri]::TryCreate($website, [UriKind]::Absolute, [ref]$siteUri) -and $siteUri.AbsolutePath -ne '/') {
-        $city = Find-TvAddressCity "$(& $get "$($siteUri.GetLeftPart('Authority'))/")"
+        $city = Find-WkAddressCity "$(& $get "$($siteUri.GetLeftPart('Authority'))/")"
       }
     }
     if ($city) { $entry.city = $city }
@@ -230,7 +230,7 @@ function Invoke-TvCityLookup {
   }
 }
 
-function Read-TvCityLookupState {
+function Read-WkCityLookupState {
   # data/city-lookup.json as a hashtable of URL to entry, empty when the file is missing.
   param([Parameter(Mandatory)][string]$Path)
 
@@ -245,7 +245,7 @@ function Read-TvCityLookupState {
   $state
 }
 
-function Write-TvCityLookupState {
+function Write-WkCityLookupState {
   # Sorted by URL, LF line endings, no BOM, so nightly diffs stay small.
   param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][hashtable]$State)
 

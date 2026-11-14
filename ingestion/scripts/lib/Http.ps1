@@ -1,29 +1,29 @@
-# HTTP and JSON helpers. Every outbound request goes through Invoke-TvRequest.
+# HTTP and JSON helpers. Every outbound request goes through Invoke-WkRequest.
 
-function Get-TvUserAgent {
+function Get-WkUserAgent {
   'WeekendBoise/1.0 (+https://github.com/rhundhausen/weekendboise)'
 }
 
-function Hide-TvSecret {
+function Hide-WkSecret {
   # Credentials travel in query strings, so strip them before a URL reaches a log.
   param([string]$Text)
 
   $Text -replace '(?i)\b(apikey|app_id|client_id|client_secret|token|key)=[^&\s"'']+', '$1=***'
 }
 
-function ConvertFrom-TvJsonElement {
+function ConvertFrom-WkJsonElement {
   param([System.Text.Json.JsonElement]$Element)
 
   switch ($Element.ValueKind.ToString()) {
     'Object' {
       $properties = [ordered]@{}
       foreach ($property in $Element.EnumerateObject()) {
-        $properties[$property.Name] = ConvertFrom-TvJsonElement $property.Value
+        $properties[$property.Name] = ConvertFrom-WkJsonElement $property.Value
       }
       return [pscustomobject]$properties
     }
     'Array' {
-      $items = foreach ($item in $Element.EnumerateArray()) { , (ConvertFrom-TvJsonElement $item) }
+      $items = foreach ($item in $Element.EnumerateArray()) { , (ConvertFrom-WkJsonElement $item) }
       return , @($items)
     }
     'String' { return $Element.GetString() }
@@ -34,7 +34,7 @@ function ConvertFrom-TvJsonElement {
   }
 }
 
-function ConvertFrom-TvJson {
+function ConvertFrom-WkJson {
   <#
   .SYNOPSIS
     Parses JSON and leaves every string a string.
@@ -51,7 +51,7 @@ function ConvertFrom-TvJson {
   process {
     $document = [System.Text.Json.JsonDocument]::Parse($Json)
     try {
-      $result = ConvertFrom-TvJsonElement $document.RootElement
+      $result = ConvertFrom-WkJsonElement $document.RootElement
     } finally {
       $document.Dispose()
     }
@@ -59,7 +59,7 @@ function ConvertFrom-TvJson {
   }
 }
 
-function Invoke-TvRequest {
+function Invoke-WkRequest {
   <#
   .SYNOPSIS
     GETs a URL with the project User-Agent, a timeout, and one retry on 5xx. -Method Post with a
@@ -93,26 +93,26 @@ function Invoke-TvRequest {
   while ($true) {
     $attempt++
     try {
-      $request = @{ Uri = $Uri; UserAgent = (Get-TvUserAgent); Headers = $Headers; TimeoutSec = $TimeoutSec; Method = $Method }
+      $request = @{ Uri = $Uri; UserAgent = (Get-WkUserAgent); Headers = $Headers; TimeoutSec = $TimeoutSec; Method = $Method }
       if ($Form) { $request.Body = $Form }
       $response = Invoke-WebRequest @request -SkipHttpErrorCheck -ErrorAction Stop
     } catch {
-      throw "Request failed for $(Hide-TvSecret $Uri): $(Hide-TvSecret $_.Exception.Message)"
+      throw "Request failed for $(Hide-WkSecret $Uri): $(Hide-WkSecret $_.Exception.Message)"
     }
 
     $status = [int]$response.StatusCode
     if ($status -ge 500 -and $attempt -eq 1) {
-      Write-Warning "HTTP $status from $(Hide-TvSecret $Uri), retrying once"
+      Write-Warning "HTTP $status from $(Hide-WkSecret $Uri), retrying once"
       Start-Sleep -Seconds $RetryDelaySeconds
       continue
     }
     if ($status -lt 200 -or $status -ge 300) {
-      throw "HTTP $status from $(Hide-TvSecret $Uri)"
+      throw "HTTP $status from $(Hide-WkSecret $Uri)"
     }
 
     # Decode the bytes ourselves. text/calendar with no charset would otherwise be read as Latin-1.
     $body = [Text.Encoding]::UTF8.GetString($response.RawContentStream.ToArray())
     if ($Raw) { return $body }
-    return ConvertFrom-TvJson $body
+    return ConvertFrom-WkJson $body
   }
 }

@@ -3,7 +3,7 @@
 . "$PSScriptRoot/Schema.ps1"
 
 # Idaho ZIP codes for the cities in the schema. 83714 is mostly Garden City.
-$script:TvZipCities = @{
+$script:WkZipCities = @{
   '83605' = 'Caldwell'; '83607' = 'Caldwell'
   '83616' = 'Eagle'
   '83617' = 'Emmett'
@@ -25,54 +25,54 @@ $script:TvZipCities = @{
   '83654' = 'Valley County'; '83549' = 'Valley County'
 }
 foreach ($zip in 83701..83799) {
-  if (-not $script:TvZipCities.ContainsKey("$zip")) { $script:TvZipCities["$zip"] = 'Boise' }
+  if (-not $script:WkZipCities.ContainsKey("$zip")) { $script:WkZipCities["$zip"] = 'Boise' }
 }
 
 # Cities whose names are also everyday words or surnames ("star", "Emmett Till", "Payette River").
 # These are trusted only from a ZIP code or a "City, ID" pattern, never from a bare word.
-$script:TvAmbiguousCities = @('Star', 'Payette', 'Emmett', 'Middleton', 'Weiser')
+$script:WkAmbiguousCities = @('Star', 'Payette', 'Emmett', 'Middleton', 'Weiser')
 
-function Get-TvCityNames {
+function Get-WkCityNames {
   # Every city in the event schema except Other, longest first so "Garden City" wins over shorter names.
   $schema = Join-Path $PSScriptRoot '..' '..' 'schema' 'event.schema.json'
-  if (-not $script:TvCityNames) {
+  if (-not $script:WkCityNames) {
     $enum = (Get-Content -LiteralPath $schema -Raw | ConvertFrom-Json).properties.city.enum
-    $script:TvCityNames = @($enum | Where-Object { $_ -ne 'Other' } | Sort-Object Length -Descending)
+    $script:WkCityNames = @($enum | Where-Object { $_ -ne 'Other' } | Sort-Object Length -Descending)
   }
-  $script:TvCityNames
+  $script:WkCityNames
 }
 
-function Get-TvPlaceCities {
+function Get-WkPlaceCities {
   # data/schema/place-cities.json, loaded once.
-  if (-not $script:TvPlaceCities) {
+  if (-not $script:WkPlaceCities) {
     $path = Join-Path $PSScriptRoot '..' '..' '..' 'data' 'schema' 'place-cities.json'
-    $script:TvPlaceCities = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -AsHashtable
+    $script:WkPlaceCities = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -AsHashtable
   }
-  $script:TvPlaceCities
+  $script:WkPlaceCities
 }
 
-function Remove-TvNonPlace {
+function Remove-WkNonPlace {
   # Blanks out names that contain a city but aren't places in it, such as Boise Cascade.
   [CmdletBinding()]
   [OutputType([string])]
   param([AllowEmptyString()][string]$Text)
 
-  foreach ($name in @((Get-TvPlaceCities).ignore)) {
+  foreach ($name in @((Get-WkPlaceCities).ignore)) {
     $Text = $Text -replace ('(?i)\b' + [regex]::Escape($name) + '\b'), ' '
   }
   $Text
 }
 
-function Find-TvPlace {
+function Find-WkPlace {
   # Cities of the known places named in the text.
   [CmdletBinding()]
   param([AllowEmptyString()][string]$Text)
 
-  $places = (Get-TvPlaceCities).places
+  $places = (Get-WkPlaceCities).places
   @($places.Keys | Where-Object { $Text -match ('(?i)\b' + [regex]::Escape($_) + '(?!\w)') } | ForEach-Object { $places[$_] } | Select-Object -Unique)
 }
 
-function Find-TvCityWord {
+function Find-WkCityWord {
   # Distinct cities named as whole words in the text, optionally only when followed by ", ID" or ", Idaho".
   [CmdletBinding()]
   param(
@@ -84,15 +84,15 @@ function Find-TvCityWord {
 
   if (-not $Text) { return @() }
   $found = [Collections.Generic.List[string]]::new()
-  foreach ($city in (Get-TvCityNames)) {
-    if ($Unambiguous -and $city -in $script:TvAmbiguousCities) { continue }
+  foreach ($city in (Get-WkCityNames)) {
+    if ($Unambiguous -and $city -in $script:WkAmbiguousCities) { continue }
     $pattern = '(?i)' + $Before + '\b' + [regex]::Escape($city) + '\b' + ($WithState ? ',?\s+(ID|Idaho)\b' : '(?!\w)')
     if ($Text -match $pattern -and -not $found.Contains($city)) { $found.Add($city) }
   }
   $found.ToArray()
 }
 
-function Get-TvCityClue {
+function Get-WkCityClue {
   <#
   .SYNOPSIS
     Infers an event's city from its venue, title, and description, or returns $null.
@@ -116,21 +116,21 @@ function Get-TvCityClue {
     [hashtable]$VenueCities = @{}
   )
 
-  $venue = Remove-TvNonPlace "$($Event.venue)"
-  $title = Remove-TvNonPlace "$($Event.title)"
-  $description = Remove-TvNonPlace "$($Event.description)"
+  $venue = Remove-WkNonPlace "$($Event.venue)"
+  $title = Remove-WkNonPlace "$($Event.title)"
+  $description = Remove-WkNonPlace "$($Event.description)"
   $all = "$venue`n$title`n$description"
 
   # Each step runs only if the ones before it found nothing.
   $steps = @(
-    { @([regex]::Matches("$venue`n$description", '\b83[567]\d\d\b') | ForEach-Object { $script:TvZipCities[$_.Value] }) }
-    { @(Find-TvCityWord $all -WithState) + @(Find-TvCityWord $title -Before '\(\s*' | Where-Object { $title -match ('(?i)\(\s*' + [regex]::Escape($_) + '\s*\)') }) }
-    { Find-TvCityWord $venue -Unambiguous }
-    { Find-TvPlace $all }
+    { @([regex]::Matches("$venue`n$description", '\b83[567]\d\d\b') | ForEach-Object { $script:WkZipCities[$_.Value] }) }
+    { @(Find-WkCityWord $all -WithState) + @(Find-WkCityWord $title -Before '\(\s*' | Where-Object { $title -match ('(?i)\(\s*' + [regex]::Escape($_) + '\s*\)') }) }
+    { Find-WkCityWord $venue -Unambiguous }
+    { Find-WkPlace $all }
     { @(if ($VenueCities.ContainsKey("$($Event.venueKey)")) { $VenueCities["$($Event.venueKey)"] }) }
-    { Find-TvCityWord "$title`n$description" -Unambiguous -Before '\b(in|downtown|at)\s+(the\s+)?' }
-    { Find-TvCityWord $title -Unambiguous }
-    { Find-TvCityWord $description -Unambiguous }
+    { Find-WkCityWord "$title`n$description" -Unambiguous -Before '\b(in|downtown|at)\s+(the\s+)?' }
+    { Find-WkCityWord $title -Unambiguous }
+    { Find-WkCityWord $description -Unambiguous }
   )
   foreach ($step in $steps) {
     $cities = @(& $step | Where-Object { $_ } | Select-Object -Unique)
@@ -140,7 +140,7 @@ function Get-TvCityClue {
   $null
 }
 
-function Get-TvVenueCities {
+function Get-WkVenueCities {
   # venueKey to city, for venues that events with a real city place in exactly one city.
   # A venue that also appears with city Other is a placeholder ("Various Treasure Valley locations"),
   # not a place, so it is left out even when a merge gave one of its events a city.
@@ -162,7 +162,7 @@ function Get-TvVenueCities {
   $map
 }
 
-function Resolve-TvOtherCity {
+function Resolve-WkOtherCity {
   <#
   .SYNOPSIS
     Sets the city on events stored as Other when their text says where they are. Returns how many changed.
@@ -178,11 +178,11 @@ function Resolve-TvOtherCity {
     [AllowEmptyCollection()][object[]]$Known = @()
   )
 
-  $venueCities = Get-TvVenueCities (@($Events) + @($Known))
+  $venueCities = Get-WkVenueCities (@($Events) + @($Known))
   $changed = 0
   foreach ($event in $Events) {
     if ($event.city -and $event.city -ne 'Other') { continue }
-    $city = Get-TvCityClue $event -VenueCities $venueCities
+    $city = Get-WkCityClue $event -VenueCities $venueCities
     if ($city) {
       $event | Add-Member -NotePropertyName city -NotePropertyValue $city -Force
       $changed++
@@ -191,7 +191,7 @@ function Resolve-TvOtherCity {
   $changed
 }
 
-function Resolve-TvTitleVenue {
+function Resolve-WkTitleVenue {
   <#
   .SYNOPSIS
     Gives an event at a placeholder venue the venue its title names. Returns how many changed.
@@ -201,17 +201,17 @@ function Resolve-TvTitleVenue {
     Brunch | Meriwether Cider". When the title ends in a known venue after "|", "@", a spaced
     dash, "at", or "at the", the event takes that venue's name, key, and city, and its id and size
     are rebuilt to match. After "|", "@", or a dash the venue is also dropped from the title, as
-    New-TvEvent does; after "at" the title reads naturally and stays. Known venues are those other
-    events place in exactly one city (Get-TvVenueCities), and the places in
+    New-WkEvent does; after "at" the title reads naturally and stays. Known venues are those other
+    events place in exactly one city (Get-WkVenueCities), and the places in
     data/schema/place-cities.json. Anything else is left alone, since the words may name an event
     ("at Canyon County Festival of Trees", "| Dog Winter Photo Sessions"), not a place. Run it
-    before Merge-TvEvents, so the event can merge with the venue's own listing.
+    before Merge-WkEvents, so the event can merge with the venue's own listing.
   #>
   [CmdletBinding()]
   [OutputType([int])]
   param([Parameter(Mandatory, Position = 0)][AllowEmptyCollection()][object[]]$Events)
 
-  $venueCities = Get-TvVenueCities $Events
+  $venueCities = Get-WkVenueCities $Events
   $names = @{}
   foreach ($event in $Events) {
     if ($event.venueKey -and $venueCities.ContainsKey($event.venueKey) -and -not $names.ContainsKey($event.venueKey)) {
@@ -223,7 +223,7 @@ function Resolve-TvTitleVenue {
   foreach ($event in $Events) {
     if ($event.venueKey -and -not $venueCities.ContainsKey($event.venueKey)) { $placeholders[$event.venueKey] = $true }
   }
-  $places = (Get-TvPlaceCities).places
+  $places = (Get-WkPlaceCities).places
   foreach ($place in $places.Keys) {
     $key = Get-VenueKey $place
     if (-not $venueCities.ContainsKey($key)) {
@@ -245,10 +245,10 @@ function Resolve-TvTitleVenue {
       if (-not $match.Success) { continue }
       $named = $match.Groups['venue'].Value
       # A bare city ("| Caldwell") says where, not at what venue.
-      if (Resolve-TvCity $named.Trim()) { continue }
+      if (Resolve-WkCity $named.Trim()) { continue }
       foreach ($candidate in @("$($match.Groups['the'].Value)$named", $named)) {
         $try = Get-VenueKey $candidate
-        $alias = Resolve-TvVenueAlias $try
+        $alias = Resolve-WkVenueAlias $try
         if ($alias) { $try = $alias.key }
         if ($venueCities.ContainsKey($try) -and -not $placeholders.ContainsKey($try)) { $key = $try; break }
       }
@@ -263,8 +263,8 @@ function Resolve-TvTitleVenue {
     $event | Add-Member -NotePropertyName venue -NotePropertyValue $names[$key] -Force
     $event | Add-Member -NotePropertyName venueKey -NotePropertyValue $key -Force
     $event | Add-Member -NotePropertyName city -NotePropertyValue $venueCities[$key] -Force
-    $event | Add-Member -NotePropertyName id -NotePropertyValue (Get-TvEventId $event.title $event.start $key) -Force
-    $event | Add-Member -NotePropertyName size -NotePropertyValue (Get-TvEventSize -VenueKey $key -Category $event.category -Tags @($event.tags)) -Force
+    $event | Add-Member -NotePropertyName id -NotePropertyValue (Get-WkEventId $event.title $event.start $key) -Force
+    $event | Add-Member -NotePropertyName size -NotePropertyValue (Get-WkEventSize -VenueKey $key -Category $event.category -Tags @($event.tags)) -Force
     $changed++
   }
   $changed

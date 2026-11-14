@@ -13,57 +13,57 @@ BeforeAll {
       Sources  = @(@{ name = 'a'; url = 'https://example.test/show'; fetchedAt = '2026-11-01T10:00:00Z' })
     }
     foreach ($key in $Overrides.Keys) { $arguments[$key] = $Overrides[$key] }
-    New-TvEvent @arguments
+    New-WkEvent @arguments
   }
 }
 
-Describe 'ConvertTo-BoiseTime' {
+Describe 'ConvertTo-LocalTime' {
   It 'uses the standard offset in winter' {
-    ConvertTo-BoiseTime '2026-11-14T19:30:00' | Should -Be '2026-11-14T19:30:00-07:00'
+    ConvertTo-LocalTime '2026-11-14T19:30:00' | Should -Be '2026-11-14T19:30:00-07:00'
   }
 
   It 'uses the daylight offset in summer' {
-    ConvertTo-BoiseTime '2026-07-04T21:00:00' | Should -Be '2026-07-04T21:00:00-06:00'
+    ConvertTo-LocalTime '2026-07-04T21:00:00' | Should -Be '2026-07-04T21:00:00-06:00'
   }
 
   It 'converts a UTC string' {
-    ConvertTo-BoiseTime '2026-11-15T02:30:00Z' | Should -Be '2026-11-14T19:30:00-07:00'
+    ConvertTo-LocalTime '2026-11-15T02:30:00Z' | Should -Be '2026-11-14T19:30:00-07:00'
   }
 
   It 'converts a string with an explicit offset' {
-    ConvertTo-BoiseTime '2026-11-14T21:30:00-05:00' | Should -Be '2026-11-14T19:30:00-07:00'
+    ConvertTo-LocalTime '2026-11-14T21:30:00-05:00' | Should -Be '2026-11-14T19:30:00-07:00'
   }
 
   It 'reads a zoneless string in the source time zone' {
-    ConvertTo-BoiseTime '2026-11-14T21:30:00' 'America/New_York' | Should -Be '2026-11-14T19:30:00-07:00'
+    ConvertTo-LocalTime '2026-11-14T21:30:00' 'America/New_York' | Should -Be '2026-11-14T19:30:00-07:00'
   }
 
   It 'ignores the source time zone when the value has an offset' {
-    ConvertTo-BoiseTime '2026-11-15T02:30:00Z' 'America/New_York' | Should -Be '2026-11-14T19:30:00-07:00'
+    ConvertTo-LocalTime '2026-11-15T02:30:00Z' 'America/New_York' | Should -Be '2026-11-14T19:30:00-07:00'
   }
 
   It 'reads an unspecified DateTime in the source time zone' {
     $value = [DateTime]::new(2026, 11, 14, 21, 30, 0, [DateTimeKind]::Unspecified)
-    ConvertTo-BoiseTime $value 'America/New_York' | Should -Be '2026-11-14T19:30:00-07:00'
+    ConvertTo-LocalTime $value 'America/New_York' | Should -Be '2026-11-14T19:30:00-07:00'
   }
 
   It 'converts a UTC DateTime' {
     $value = [DateTime]::new(2026, 11, 15, 2, 30, 0, [DateTimeKind]::Utc)
-    ConvertTo-BoiseTime $value | Should -Be '2026-11-14T19:30:00-07:00'
+    ConvertTo-LocalTime $value | Should -Be '2026-11-14T19:30:00-07:00'
   }
 
   It 'converts a DateTimeOffset' {
     $value = [DateTimeOffset]::new(2026, 11, 15, 2, 30, 0, [TimeSpan]::Zero)
-    ConvertTo-BoiseTime $value | Should -Be '2026-11-14T19:30:00-07:00'
+    ConvertTo-LocalTime $value | Should -Be '2026-11-14T19:30:00-07:00'
   }
 
   It 'moves the date when the conversion crosses midnight' {
-    ConvertTo-BoiseTime '2026-10-30T01:00:00Z' | Should -Be '2026-10-29T19:00:00-06:00'
+    ConvertTo-LocalTime '2026-10-30T01:00:00Z' | Should -Be '2026-10-29T19:00:00-06:00'
   }
 
   It 'gives each side of the fall DST change its own offset' {
-    ConvertTo-BoiseTime '2026-11-01T07:30:00Z' | Should -Be '2026-11-01T01:30:00-06:00'
-    ConvertTo-BoiseTime '2026-11-01T08:30:00Z' | Should -Be '2026-11-01T01:30:00-07:00'
+    ConvertTo-LocalTime '2026-11-01T07:30:00Z' | Should -Be '2026-11-01T01:30:00-06:00'
+    ConvertTo-LocalTime '2026-11-01T08:30:00Z' | Should -Be '2026-11-01T01:30:00-07:00'
   }
 }
 
@@ -89,7 +89,7 @@ Describe 'Get-NormalizedTitle' {
   }
 }
 
-Describe 'Resolve-TvCity' {
+Describe 'Resolve-WkCity' {
   It 'maps <name> to <want>' -ForEach @(
     @{ name = 'boise'; want = 'Boise' }
     @{ name = 'Valley County'; want = 'Valley County' }
@@ -99,15 +99,15 @@ Describe 'Resolve-TvCity' {
     @{ name = 'New Meadows'; want = 'Valley County' }
     @{ name = 'Riggins'; want = 'Valley County' }
   ) {
-    Resolve-TvCity $name | Should -Be $want
+    Resolve-WkCity $name | Should -Be $want
   }
 
   It 'returns nothing for a place outside the list' {
-    Resolve-TvCity 'White Bird' | Should -BeNullOrEmpty
+    Resolve-WkCity 'White Bird' | Should -BeNullOrEmpty
   }
 }
 
-Describe 'ConvertFrom-TvLocation' {
+Describe 'ConvertFrom-WkLocation' {
   BeforeAll {
     $source = [pscustomobject]@{ venue = 'Boise State University'; venueKey = 'boise-state-university'; city = 'Other' }
   }
@@ -121,25 +121,25 @@ Describe 'ConvertFrom-TvLocation' {
     @{ location = 'Seven Devils Taphouse, 740 Village Dr., Donnelly, ID, 83615, United States'; venue = 'Seven Devils Taphouse'; key = 'seven-devils-taphouse'; city = 'Valley County' }
     @{ location = 'MAC Snow Front Base Area, 3890 Goose Lake Road, McCall, ID, 83638'; venue = 'MAC Snow Front Base Area'; key = 'mac-snow-front-base-area'; city = 'Valley County' }
   ) {
-    $result = ConvertFrom-TvLocation $location -Source $source
+    $result = ConvertFrom-WkLocation $location -Source $source
     $result.Venue | Should -Be $venue
     $result.VenueKey | Should -Be $key
     $result.City | Should -Be $city
   }
 
   It 'falls back when only a city is given' {
-    $result = ConvertFrom-TvLocation 'Boise, Idaho' -Source $source
+    $result = ConvertFrom-WkLocation 'Boise, Idaho' -Source $source
     $result.Venue | Should -Be 'Boise State University'
     $result.VenueKey | Should -Be 'boise-state-university'
     $result.City | Should -Be 'Boise'
   }
 
   It 'falls back when the location is empty' {
-    (ConvertFrom-TvLocation '' -Source $source).Venue | Should -Be 'Boise State University'
+    (ConvertFrom-WkLocation '' -Source $source).Venue | Should -Be 'Boise State University'
   }
 }
 
-Describe 'ConvertTo-TvTitleCase' {
+Describe 'ConvertTo-WkTitleCase' {
   It 'title-cases an all-caps title and keeps acronyms: <title>' -ForEach @(
     @{ title = 'OLD BOISE MODEL RAILROAD'; want = 'Old Boise Model Railroad' }
     @{ title = 'THE LEGEND OF KORRA IN CONCERT'; want = 'The Legend of Korra in Concert' }
@@ -156,7 +156,7 @@ Describe 'ConvertTo-TvTitleCase' {
     @{ title = 'SNOWSHOE TOUR IN MCCALL'; want = 'Snowshoe Tour in McCall' }
     @{ title = 'ROCKY II AT THE EGYPTIAN'; want = 'Rocky II at the Egyptian' }
   ) {
-    ConvertTo-TvTitleCase $title | Should -BeExactly $want
+    ConvertTo-WkTitleCase $title | Should -BeExactly $want
   }
 
   It 'leaves a title that has lowercase letters, or is one word: <title>' -ForEach @(
@@ -166,7 +166,7 @@ Describe 'ConvertTo-TvTitleCase' {
     @{ title = 'Music & Movement' }
     @{ title = 'oldspeak' }
   ) {
-    ConvertTo-TvTitleCase $title | Should -BeExactly $title
+    ConvertTo-WkTitleCase $title | Should -BeExactly $title
   }
 
   It 'title-cases an all-lowercase title, without keepUpper: <title>' -ForEach @(
@@ -175,11 +175,11 @@ Describe 'ConvertTo-TvTitleCase' {
     @{ title = 'dj night on st patrick''s day'; want = 'DJ Night on St Patrick''s Day' }
     @{ title = 'snowshoe tour in mccall'; want = 'Snowshoe Tour in McCall' }
   ) {
-    ConvertTo-TvTitleCase $title | Should -BeExactly $want
+    ConvertTo-WkTitleCase $title | Should -BeExactly $want
   }
 }
 
-Describe 'New-TvEvent' {
+Describe 'New-WkEvent' {
   It 'title-cases an all-caps title' {
     (New-TestEvent @{ Title = 'OLD BOISE MODEL RAILROAD' }).title | Should -BeExactly 'Old Boise Model Railroad'
   }
@@ -287,14 +287,14 @@ Describe 'New-TvEvent' {
   }
 }
 
-Describe 'Test-TvEvent' {
+Describe 'Test-WkEvent' {
   It 'accepts a built event' {
-    Test-TvEvent (New-TestEvent) | Should -BeTrue
+    Test-WkEvent (New-TestEvent) | Should -BeTrue
   }
 
   It 'rejects an event with extra fields' {
     $event = New-TestEvent
     $event | Add-Member -NotePropertyName image -NotePropertyValue 'https://example.test/i.png'
-    Test-TvEvent $event | Should -BeFalse
+    Test-WkEvent $event | Should -BeFalse
   }
 }

@@ -30,7 +30,7 @@ function ConvertFrom-IcsDate {
 
   $local = [DateTime]::ParseExact($Value.TrimEnd('Z'), "yyyyMMdd'T'HHmmss", $invariant, $none)
   if ($Value.EndsWith('Z')) {
-    return @{ Value = ConvertTo-BoiseTime ([DateTime]::SpecifyKind($local, [DateTimeKind]::Utc)); AllDay = $false }
+    return @{ Value = ConvertTo-LocalTime ([DateTime]::SpecifyKind($local, [DateTimeKind]::Utc)); AllDay = $false }
   }
 
   $zone = $Parameters['TZID']
@@ -42,7 +42,7 @@ function ConvertFrom-IcsDate {
       $zone = $null
     }
   }
-  @{ Value = ConvertTo-BoiseTime $local $zone; AllDay = $false }
+  @{ Value = ConvertTo-LocalTime $local $zone; AllDay = $false }
 }
 
 function ConvertFrom-Ics {

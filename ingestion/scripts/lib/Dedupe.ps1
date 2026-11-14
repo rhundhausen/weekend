@@ -64,7 +64,7 @@ $script:TitleExpansions = @{
   nnu = 'northwest nazarene university'
 }
 
-function Test-TvCanceledTitle {
+function Test-WkCanceledTitle {
   # True for titles like "CANCELED - Play and Learn" or "CANCELLED Ping-Pong Club".
   [CmdletBinding()]
   [OutputType([bool])]
@@ -73,7 +73,7 @@ function Test-TvCanceledTitle {
   $Title -match $script:CanceledPattern
 }
 
-function Get-TvMatchTitle {
+function Get-WkMatchTitle {
   # The normalized title with any "canceled" marker removed, so a cancellation still matches its listing.
   [CmdletBinding()]
   [OutputType([string])]
@@ -82,8 +82,8 @@ function Get-TvMatchTitle {
   ((Get-NormalizedTitle $Title) -replace '\bcancell?ed\b', ' ' -replace '\s+', ' ').Trim()
 }
 
-function Get-TvTitleWords {
-  # The distinct words that identify an event, from a title already passed through Get-TvMatchTitle.
+function Get-WkTitleWords {
+  # The distinct words that identify an event, from a title already passed through Get-WkMatchTitle.
   [CmdletBinding()]
   param([Parameter(Mandatory, Position = 0)][AllowEmptyString()][string]$MatchTitle)
 
@@ -98,7 +98,7 @@ function Get-TvTitleWords {
   , $words
 }
 
-function Get-TvTitleCore {
+function Get-WkTitleCore {
   <#
   .SYNOPSIS
     The part of a title that names the work: without a presenter ("Ballet Idaho presents The
@@ -114,7 +114,7 @@ function Get-TvTitleCore {
   if ($core) { $core } else { $Title }
 }
 
-function Test-TvSameTitleWords {
+function Test-WkSameTitleWords {
   <#
   .SYNOPSIS
     True when two titles name the same event in different words.
@@ -138,7 +138,7 @@ function Test-TvSameTitleWords {
   ($shared -ge 2) -and ($shared / $shorter -ge 0.6)
 }
 
-function Get-TvEventRank {
+function Get-WkEventRank {
   # The best (lowest) priority among the sources that reported the event.
   param(
     [object]$Event,
@@ -152,7 +152,7 @@ function Get-TvEventRank {
   ($ranks | Measure-Object -Minimum).Minimum
 }
 
-function Test-TvPlaceholderVenue {
+function Test-WkPlaceholderVenue {
   # True for a venue that names no place: the bare city, a city with state or ZIP ("Boise, ID
   # 83703"), or a stand-in such as "Various Treasure Valley locations", "TBA", or "TBD".
   param([AllowEmptyString()][string]$Venue, [AllowEmptyString()][string]$City)
@@ -164,7 +164,7 @@ function Test-TvPlaceholderVenue {
   $v -match '(?i)^[a-z .'']+,\s*(?:id|idaho)\b[\s\d-]*$'
 }
 
-function Merge-TvEvents {
+function Merge-WkEvents {
   <#
   .SYNOPSIS
     Collapses events that describe the same thing.
@@ -173,9 +173,9 @@ function Merge-TvEvents {
     - their ids match, or
     - their normalized titles have Jaro-Winkler similarity above 0.9 and they start within 30 minutes, or
     - they start at the same minute, no source reported both, and their titles share their
-      identifying words (Test-TvSameTitleWords). This catches "Jo Koy" against
+      identifying words (Test-WkSameTitleWords). This catches "Jo Koy" against
       "Jo Koy - Koy Meets World Tour", and "BSU Women's Basketball Game" against
-      "Boise State University Women's Basketball vs Portland State". Each title's core (Get-TvTitleCore,
+      "Boise State University Women's Basketball vs Portland State". Each title's core (Get-WkTitleCore,
       without a presenter or subtitle) is compared as well.
     Two multi-day events (ending on a later day than they start) are also the same, at any venueKey
     and start time, if they have the same normalized title, the same known city (not Other), the same
@@ -213,7 +213,7 @@ function Merge-TvEvents {
   )
 
   $ordered = $Events |
-    Select-Object @{ n = 'Event'; e = { $_ } }, @{ n = 'Rank'; e = { Get-TvEventRank $_ $Priorities } }, @{ n = 'Instant'; e = { Get-TvEventInstant $_.start } } |
+    Select-Object @{ n = 'Event'; e = { $_ } }, @{ n = 'Rank'; e = { Get-WkEventRank $_ $Priorities } }, @{ n = 'Instant'; e = { Get-WkEventInstant $_.start } } |
     Sort-Object Rank, Instant, @{ e = { $_.Event.id } } -Stable
 
   $kept = [System.Collections.Generic.List[object]]::new()
@@ -227,12 +227,12 @@ function Merge-TvEvents {
 
   foreach ($entry in $ordered) {
     $event = $entry.Event
-    $title = Get-TvMatchTitle $event.title
-    $words = Get-TvTitleWords $title
+    $title = Get-WkMatchTitle $event.title
+    $words = Get-WkTitleWords $title
     # The title's core (no presenter or subtitle) is matched too, so "Ballet Idaho presents The
     # Nutcracker" and "The Nutcracker: With Live Music by the Boise Phil" at one minute are one show.
-    $core = Get-TvTitleWords (Get-TvMatchTitle (Get-TvTitleCore $event.title))
-    $canceled = Test-TvCanceledTitle $event.title
+    $core = Get-WkTitleWords (Get-WkMatchTitle (Get-WkTitleCore $event.title))
+    $canceled = Test-WkCanceledTitle $event.title
     $sourceNames = @($event.sources | ForEach-Object name)
     $slot = [Math]::Floor($entry.Instant.UtcTicks / $slotTicks)
 
@@ -251,7 +251,7 @@ function Merge-TvEvents {
           # One source listing two things at the same minute means two things, so only cross-source.
           if (-not $sameMinute -and $gap -lt 1 -and
             -not @($candidate.Event.sources | Where-Object { $_.name -in $sourceNames }) -and
-            @($candidate.WordSets | Where-Object { (Test-TvSameTitleWords $words $_) -or (Test-TvSameTitleWords $core $_) })) {
+            @($candidate.WordSets | Where-Object { (Test-WkSameTitleWords $words $_) -or (Test-WkSameTitleWords $core $_) })) {
             $sameMinute = $candidate
           }
         }
@@ -279,7 +279,7 @@ function Merge-TvEvents {
         } | Select-Object -First 1
         if ($match -and $match.Event.venueKey -ne $event.venueKey) {
           Write-Verbose "Merged across venues: '$($event.title)' at $($event.start) in $($event.city), $($match.Event.venue) and $($event.venue)"
-          if ((Test-TvPlaceholderVenue $match.Event.venue $match.Event.city) -and -not (Test-TvPlaceholderVenue $event.venue $event.city)) {
+          if ((Test-WkPlaceholderVenue $match.Event.venue $match.Event.city) -and -not (Test-WkPlaceholderVenue $event.venue $event.city)) {
             $match.Event.venue = $event.venue
             $match.Event.venueKey = $event.venueKey
           }

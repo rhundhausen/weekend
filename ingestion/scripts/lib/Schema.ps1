@@ -2,11 +2,11 @@
 
 . "$PSScriptRoot/Cost.ps1"
 
-function Get-BoiseTimeZone {
+function Get-WkTimeZone {
   [TimeZoneInfo]::FindSystemTimeZoneById('America/Boise')
 }
 
-function ConvertTo-BoiseTime {
+function ConvertTo-LocalTime {
   <#
   .SYNOPSIS
     Converts a DateTime, DateTimeOffset, or string to ISO 8601 with the Boise offset.
@@ -24,7 +24,7 @@ function ConvertTo-BoiseTime {
     [string]$SourceTimeZone
   )
 
-  $boise = Get-BoiseTimeZone
+  $boise = Get-WkTimeZone
   $sourceZone = if ($SourceTimeZone) { [TimeZoneInfo]::FindSystemTimeZoneById($SourceTimeZone) } else { $boise }
   $invariant = [Globalization.CultureInfo]::InvariantCulture
 
@@ -46,7 +46,7 @@ function ConvertTo-BoiseTime {
   [TimeZoneInfo]::ConvertTime($instant, $boise).ToString('yyyy-MM-ddTHH:mm:sszzz', $invariant)
 }
 
-function Get-TvEventInstant {
+function Get-WkEventInstant {
   # Date-only values count as midnight in Boise.
   [CmdletBinding()]
   [OutputType([DateTimeOffset])]
@@ -56,7 +56,7 @@ function Get-TvEventInstant {
   )
 
   if ($Value.Length -eq 10) {
-    $Value = ConvertTo-BoiseTime "$Value 00:00:00"
+    $Value = ConvertTo-LocalTime "$Value 00:00:00"
   }
   [DateTimeOffset]::Parse($Value, [Globalization.CultureInfo]::InvariantCulture)
 }
@@ -111,7 +111,7 @@ function ConvertTo-PlainText {
   ([System.Net.WebUtility]::HtmlDecode($stripped) -replace '\s+', ' ').Trim()
 }
 
-function Resolve-TvCity {
+function Resolve-WkCity {
   # Maps a free-form city name to the schema enum, or returns $null when it isn't one.
   [CmdletBinding()]
   param(
@@ -132,7 +132,7 @@ function Resolve-TvCity {
   $null
 }
 
-function ConvertFrom-TvLocation {
+function ConvertFrom-WkLocation {
   <#
   .SYNOPSIS
     Splits a free-form location into venue, venueKey, and city, using the source's fallbacks.
@@ -157,7 +157,7 @@ function ConvertFrom-TvLocation {
   foreach ($part in ($Location -split ',')) {
     $part = $part.Trim()
     if (-not $part -or $part -match '^(ID|Idaho)(\s+\d{5}(-\d{4})?)?$' -or $part -match '^\d{5}(-\d{4})?$') { continue }
-    $known = Resolve-TvCity $part
+    $known = Resolve-WkCity $part
     if ($known) {
       if (-not $city) { $city = $known }
     } else {
@@ -173,12 +173,12 @@ function ConvertFrom-TvLocation {
   }
 }
 
-function Get-TvTagRules {
+function Get-WkTagRules {
   # Loads data/schema/tags.json once and compiles one regex per tag.
-  if ($script:TvTagRules) { return $script:TvTagRules }
+  if ($script:WkTagRules) { return $script:WkTagRules }
 
   $path = Join-Path $PSScriptRoot '..' '..' '..' 'data' 'schema' 'tags.json'
-  $script:TvTagRules = @(Get-Content -LiteralPath $path -Raw | ConvertFrom-Json | ForEach-Object {
+  $script:WkTagRules = @(Get-Content -LiteralPath $path -Raw | ConvertFrom-Json | ForEach-Object {
       $pattern = '\b(' + (($_.keywords | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')\b'
       [pscustomobject]@{
         Id       = $_.id
@@ -188,10 +188,10 @@ function Get-TvTagRules {
         Fallback = [bool]$_.fallback
       }
     })
-  $script:TvTagRules
+  $script:WkTagRules
 }
 
-function Get-TvClassification {
+function Get-WkClassification {
   <#
   .SYNOPSIS
     Finds an event's tags from keywords, and the category those tags point to.
@@ -235,7 +235,7 @@ function Get-TvClassification {
   $titleFallbacks = [System.Collections.Generic.HashSet[string]]::new()
   $labelFallbacks = [System.Collections.Generic.HashSet[string]]::new()
 
-  foreach ($rule in (Get-TvTagRules)) {
+  foreach ($rule in (Get-WkTagRules)) {
     $inTitle = $rule.Regex.IsMatch($titleText)
     $inLabels = @($labelTexts | Where-Object { $rule.Regex.IsMatch($_) -or $rule.Labels -contains $_ }).Count -gt 0
 
@@ -256,7 +256,7 @@ function Get-TvClassification {
   [pscustomobject]@{ Category = $category; Tags = @($tags) }
 }
 
-function Get-TvEventId {
+function Get-WkEventId {
   # The first 12 hex digits of SHA-1 over "normalized title|start date|venueKey".
   [CmdletBinding()]
   [OutputType([string])]
@@ -271,18 +271,18 @@ function Get-TvEventId {
   [Convert]::ToHexString($hash).Substring(0, 12).ToLowerInvariant()
 }
 
-function Resolve-TvVenueAlias {
+function Resolve-WkVenueAlias {
   # Returns the canonical venue for a key in data/schema/venue-aliases.json, or $null.
   param([string]$VenueKey)
 
-  if (-not $script:TvVenueAliases) {
+  if (-not $script:WkVenueAliases) {
     $path = Join-Path $PSScriptRoot '..' '..' '..' 'data' 'schema' 'venue-aliases.json'
-    $script:TvVenueAliases = (Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -AsHashtable).aliases
+    $script:WkVenueAliases = (Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -AsHashtable).aliases
   }
-  $script:TvVenueAliases[$VenueKey]
+  $script:WkVenueAliases[$VenueKey]
 }
 
-function Get-TvEventSize {
+function Get-WkEventSize {
   <#
   .SYNOPSIS
     Guesses an event's crowd size: S, M, L, or XL. See data/schema/sizes.json.
@@ -306,11 +306,11 @@ function Get-TvEventSize {
     [string[]]$Tags = @()
   )
 
-  if (-not $script:TvSizeRules) {
+  if (-not $script:WkSizeRules) {
     $path = Join-Path $PSScriptRoot '..' '..' '..' 'data' 'schema' 'sizes.json'
-    $script:TvSizeRules = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -AsHashtable
+    $script:WkSizeRules = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -AsHashtable
   }
-  $rules = $script:TvSizeRules
+  $rules = $script:WkSizeRules
 
   if (@($Tags | Where-Object { $_ -in $rules.smallTags }).Count -gt 0) { return 'S' }
   if ($rules.venues.ContainsKey($VenueKey)) { return $rules.venues[$VenueKey] }
@@ -322,7 +322,7 @@ function Get-TvEventSize {
   $rules.categories[$Category]
 }
 
-function Test-TvEvent {
+function Test-WkEvent {
   [CmdletBinding()]
   [OutputType([bool])]
   param(
@@ -338,7 +338,7 @@ function Test-TvEvent {
   }
 }
 
-function ConvertTo-TvTitleCase {
+function ConvertTo-WkTitleCase {
   <#
   .SYNOPSIS
     Changes an all-caps or all-lowercase title of two or more words to title case ("OLD BOISE
@@ -361,16 +361,16 @@ function ConvertTo-TvTitleCase {
   $words = [regex]::Matches($Title, "\p{Lu}+(?:['$([char]0x2019)]\p{Lu}+)*")
   if ($words.Count -lt 2) { return $original }
 
-  if (-not $script:TvTitleCase) {
+  if (-not $script:WkTitleCase) {
     $path = Join-Path $PSScriptRoot '..' '..' '..' 'data' 'schema' 'title-case.json'
     $rules = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -AsHashtable
-    $script:TvTitleCase = @{
+    $script:WkTitleCase = @{
       KeepUpper  = [Collections.Generic.HashSet[string]]::new([string[]]$rules.keepUpper)
       Forms      = $rules.forms
       SmallWords = [Collections.Generic.HashSet[string]]::new([string[]]$rules.smallWords)
     }
   }
-  $rules = $script:TvTitleCase
+  $rules = $script:WkTitleCase
 
   $out = [Text.StringBuilder]::new()
   $last = 0
@@ -397,18 +397,18 @@ function ConvertTo-TvTitleCase {
   $out.ToString()
 }
 
-function New-TvEvent {
+function New-WkEvent {
   <#
   .SYNOPSIS
     Builds a validated event object and computes its id.
   .PARAMETER Start
-    ISO 8601 with offset from ConvertTo-BoiseTime, or YYYY-MM-DD with -AllDay.
+    ISO 8601 with offset from ConvertTo-LocalTime, or YYYY-MM-DD with -AllDay.
   .PARAMETER Category
     The event's category. With -InferCategory, this is the fallback.
   .PARAMETER InferCategory
     Use the category its tags point to, for sources that mix many kinds of event.
   .PARAMETER Labels
-    The publisher's own categories or genres. See Get-TvClassification.
+    The publisher's own categories or genres. See Get-WkClassification.
   .PARAMETER Sources
     Objects with name, url, and fetchedAt.
   .PARAMETER PriceMin
@@ -434,12 +434,12 @@ function New-TvEvent {
     [AllowNull()][Nullable[decimal]]$PriceMin
   )
 
-  $cleanTitle = ConvertTo-TvTitleCase (($Title -replace '\s+', ' ').Trim())
+  $cleanTitle = ConvertTo-WkTitleCase (($Title -replace '\s+', ' ').Trim())
   # A venue in all caps or all lowercase ("idaho art gallery") gets the same title case.
-  $Venue = ConvertTo-TvTitleCase $Venue.Trim()
+  $Venue = ConvertTo-WkTitleCase $Venue.Trim()
   $givenVenue = $Venue
   $key = if ($VenueKey) { $VenueKey } else { Get-VenueKey $Venue }
-  $alias = Resolve-TvVenueAlias $key
+  $alias = Resolve-WkVenueAlias $key
   if ($alias) {
     $key = $alias.key
     $Venue = $alias.name
@@ -457,7 +457,7 @@ function New-TvEvent {
     }
   }
   $event = [ordered]@{
-    id    = Get-TvEventId $cleanTitle $Start $key
+    id    = Get-WkEventId $cleanTitle $Start $key
     title = $cleanTitle
     start = $Start
   }
@@ -467,15 +467,15 @@ function New-TvEvent {
   $event.venueKey = $key
   $event.city = $City
 
-  $classification = Get-TvClassification $cleanTitle $Description -Labels $Labels
+  $classification = Get-WkClassification $cleanTitle $Description -Labels $Labels
   $event.category = if ($InferCategory -and $classification.Category) { $classification.Category } else { $Category }
   $event.tags = $classification.Tags
-  $event.size = Get-TvEventSize -VenueKey $key -Category $event.category -Tags $classification.Tags
+  $event.size = Get-WkEventSize -VenueKey $key -Category $event.category -Tags $classification.Tags
 
   # Read before the description loses its dollar amounts below. Only the tier is kept.
   if ($null -eq $PriceMin) {
     $PriceMin = if ('free-admission' -in $classification.Tags) { [decimal]0 } else {
-      ConvertFrom-TvPriceText (ConvertTo-PlainText $Description) -Prose
+      ConvertFrom-WkPriceText (ConvertTo-PlainText $Description) -Prose
     }
   }
   $tier = Get-CostTier -PriceMin $PriceMin
@@ -498,7 +498,7 @@ function New-TvEvent {
     })
 
   $result = [pscustomobject]$event
-  if (-not (Test-TvEvent $result)) {
+  if (-not (Test-WkEvent $result)) {
     throw "Event does not match the schema: '$cleanTitle' at $Start"
   }
   $result

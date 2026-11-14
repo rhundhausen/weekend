@@ -12,15 +12,15 @@ BeforeAll {
       [string]$Source = 'beta',
       [string]$Url = 'https://beta.test/show'
     )
-    New-TvEvent -Title $Title -Start $Start -Venue 'Hall' -City 'Boise' -Category 'music' -Url $Url `
+    New-WkEvent -Title $Title -Start $Start -Venue 'Hall' -City 'Boise' -Category 'music' -Url $Url `
       -Sources @(@{ name = $Source; url = $Url; fetchedAt = '2026-11-15T07:01:00Z' })
   }
 
   function Write-TestRaw {
     param([hashtable]$Sources, [string]$AsOf = '2026-11-15T07:00:00Z')
     $results = foreach ($name in $Sources.Keys) { [pscustomobject]@{ Name = $name; Status = 'ok'; Events = @($Sources[$name]) } }
-    $raw = Update-TvRawFile $null -Results @($results) -Keep @($Sources.Keys) -AsOf $AsOf -FetchedAt '2026-11-15T07:01:00Z'
-    Write-TvRawFile $script:rawPath $raw
+    $raw = Update-WkRawFile $null -Results @($results) -Keep @($Sources.Keys) -AsOf $AsOf -FetchedAt '2026-11-15T07:01:00Z'
+    Write-WkRawFile $script:rawPath $raw
   }
 
   function Invoke-TestRefine {
@@ -53,7 +53,7 @@ Describe 'Invoke-Refine' {
       beta                   = @(New-TestEvent)
     }
     Invoke-TestRefine
-    $events = @(Read-TvEventFile $eventsPath)
+    $events = @(Read-WkEventFile $eventsPath)
     $events.Count | Should -Be 2
     $show = $events | Where-Object title -eq 'Show'
     @($show.sources.name) | Should -Be @('beta', 'nampa-public-library')
@@ -74,7 +74,7 @@ Describe 'Invoke-Refine' {
     $guessed | Add-Member -NotePropertyName costGuess -NotePropertyValue 'free'
     Write-TestRaw @{ beta = @($old, $guessed) }
     Invoke-TestRefine
-    $events = @(Read-TvEventFile $eventsPath)
+    $events = @(Read-WkEventFile $eventsPath)
     ($events | Where-Object title -eq 'Old Gala').costTier | Should -BeExactly '$$$'
     foreach ($event in $events) {
       $event.PSObject.Properties.Name | Should -Not -Contain 'cost'
@@ -95,21 +95,21 @@ Describe 'Invoke-Refine' {
       zeta  = @(New-TestEvent -Source zeta -Url 'https://zeta.test/show')
     }
     Invoke-TestRefine
-    (Read-TvEventFile $eventsPath)[0].url | Should -Be 'https://zeta.test/show'
+    (Read-WkEventFile $eventsPath)[0].url | Should -Be 'https://zeta.test/show'
   }
 
   It 'moves past events to the archive' {
     Write-TestRaw @{ beta = @((New-TestEvent), (New-TestEvent -Title 'Last Week' -Start '2026-11-10T19:30:00-07:00' -Url 'https://beta.test/old')) }
     Invoke-TestRefine
-    @(Read-TvEventFile $eventsPath).title | Should -Be @('Show')
-    @(Read-TvEventFile (Join-Path $dir 'archive' '2026-11.json')).title | Should -Be @('Last Week')
+    @(Read-WkEventFile $eventsPath).title | Should -Be @('Show')
+    @(Read-WkEventFile (Join-Path $dir 'archive' '2026-11.json')).title | Should -Be @('Last Week')
   }
 
   It 'carries a running source''s upcoming events from events.json when the raw file has no entry for it' {
-    Write-TvEventFile $eventsPath @(New-TestEvent -Title 'Gamma Gig' -Source gamma -Url 'https://gamma.test/gig')
+    Write-WkEventFile $eventsPath @(New-TestEvent -Title 'Gamma Gig' -Source gamma -Url 'https://gamma.test/gig')
     Write-TestRaw @{ beta = @(New-TestEvent) }
     Invoke-TestRefine
-    @(Read-TvEventFile $eventsPath).title | Sort-Object | Should -Be @('Gamma Gig', 'Show')
+    @(Read-WkEventFile $eventsPath).title | Sort-Object | Should -Be @('Gamma Gig', 'Show')
   }
 
   It 'drops an event its source no longer reports' {
@@ -117,7 +117,7 @@ Describe 'Invoke-Refine' {
     Invoke-TestRefine
     Write-TestRaw @{ beta = @(New-TestEvent) }
     Invoke-TestRefine
-    @(Read-TvEventFile $eventsPath).title | Should -Be @('Show')
+    @(Read-WkEventFile $eventsPath).title | Should -Be @('Show')
   }
 
   It 'gives the same files when run twice' {
@@ -131,10 +131,10 @@ Describe 'Invoke-Refine' {
 
   It 'still applies known link results with -SkipLinkCheck' {
     $state = @{ 'https://beta.test/show' = [ordered]@{ verdict = 'broken'; status = 404; checkedAt = '2026-11-15T07:05:00Z'; failures = 0; brokenSince = '2026-11-14T07:05:00Z' } }
-    Write-TvLinkState (Join-Path $dir 'links.json') $state
+    Write-WkLinkState (Join-Path $dir 'links.json') $state
     Write-TestRaw @{ beta = @(New-TestEvent) }
     Invoke-TestRefine
-    (Read-TvEventFile $eventsPath)[0].linkBroken | Should -BeTrue
+    (Read-WkEventFile $eventsPath)[0].linkBroken | Should -BeTrue
   }
 
   It 'writes a run report to OutDir' {
@@ -146,13 +146,13 @@ Describe 'Invoke-Refine' {
   }
 
   It 'applies a city remembered in city-lookup.json and keeps the file' {
-    $other = New-TvEvent -Title 'Nature Journaling' -Start '2026-11-20T13:30:00-07:00' -Venue 'Various Treasure Valley locations' -City 'Other' `
+    $other = New-WkEvent -Title 'Nature Journaling' -Start '2026-11-20T13:30:00-07:00' -Venue 'Various Treasure Valley locations' -City 'Other' `
       -Category 'learning-business' -Url 'https://beta.test/journal' -Sources @(@{ name = 'beta'; url = 'https://beta.test/journal'; fetchedAt = '2026-11-15T07:01:00Z' })
     Write-TestRaw @{ beta = @($other) }
     $lookupPath = Join-Path $dir 'city-lookup.json'
     '{ "https://beta.test/journal": { "city": "Garden City", "website": "https://library.test/", "checkedAt": "2026-11-14T08:00:00Z" } }' | Set-Content -LiteralPath $lookupPath
     Invoke-TestRefine
-    (Read-TvEventFile $eventsPath)[0].city | Should -Be 'Garden City'
+    (Read-WkEventFile $eventsPath)[0].city | Should -Be 'Garden City'
     (Get-Content $lookupPath -Raw | ConvertFrom-Json).'https://beta.test/journal'.city | Should -Be 'Garden City'
     $report = Get-Content (Join-Path $dir 'out' 'refine.json') -Raw | ConvertFrom-Json
     $report.cityLookup.found | Should -Be 1

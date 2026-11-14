@@ -36,14 +36,14 @@ function Get-SongkickPage {
   $page = 1
   do {
     if ($page -gt 1) { Start-Sleep -Seconds 1 }
-    $result = Invoke-TvRequest "$($Source.url.TrimEnd('/'))/metro_areas/$($Source.metroAreaId)/calendar.json?apikey=$($env:SONGKICK_API_KEY)&page=$page&per_page=$perPage"
+    $result = Invoke-WkRequest "$($Source.url.TrimEnd('/'))/metro_areas/$($Source.metroAreaId)/calendar.json?apikey=$($env:SONGKICK_API_KEY)&page=$page&per_page=$perPage"
     $result
     $more = ($page * $perPage) -lt [int]$result.resultsPage.totalEntries
     $page++
   } while ($more)
 }
 
-$pages = if ($Response) { $Response | ForEach-Object { ConvertFrom-TvJson $_ } } else { Get-SongkickPage }
+$pages = if ($Response) { $Response | ForEach-Object { ConvertFrom-WkJson $_ } } else { Get-SongkickPage }
 
 foreach ($item in ($pages | ForEach-Object { $_.resultsPage.results.event } | Where-Object { $_ })) {
   if ($item.status -eq 'cancelled') { continue }
@@ -52,13 +52,13 @@ foreach ($item in ($pages | ForEach-Object { $_.resultsPage.results.event } | Wh
     # The title often ends with the date and venue. Without a time, the event is all-day.
     $title = ConvertTo-PlainText ($item.displayName -replace '\s+at\s+.+\(.*\)$', '' -replace '\s+\([^)]*\d{4}\)$', '')
     $allDay = -not $item.start.datetime
-    $start = if ($allDay) { $item.start.date } else { ConvertTo-BoiseTime $item.start.datetime }
+    $start = if ($allDay) { $item.start.date } else { ConvertTo-LocalTime $item.start.datetime }
 
     $venue = ConvertTo-PlainText $item.venue.displayName
     $hasVenue = $venue -and $venue -ne 'Unknown venue'
-    $city = Resolve-TvCity (($item.location.city -split ',')[0])
+    $city = Resolve-WkCity (($item.location.city -split ',')[0])
 
-    New-TvEvent -Title $title -Start $start -AllDay:$allDay `
+    New-WkEvent -Title $title -Start $start -AllDay:$allDay `
       -Venue ($hasVenue ? $venue : $Source.venue) -VenueKey ($hasVenue ? (Get-VenueKey $venue) : $Source.venueKey) -City ($city ? $city : $Source.city) `
       -Category $Source.category -InferCategory:([bool]$Source.inferCategory) -Url $item.uri `
       -Sources @(@{ name = $Source.name; url = $item.uri; fetchedAt = $FetchedAt })

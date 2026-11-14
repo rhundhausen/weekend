@@ -27,20 +27,20 @@ function Get-BandsintownEvent {
     throw 'BANDSINTOWN_APP_ID is not set'
   }
   $name = [uri]::EscapeDataString($Source.artistOrVenue)
-  Invoke-TvRequest "$($Source.url)/artists/$name/events?app_id=$($env:BANDSINTOWN_APP_ID)"
+  Invoke-WkRequest "$($Source.url)/artists/$name/events?app_id=$($env:BANDSINTOWN_APP_ID)"
 }
 
-$items = if ($Response) { ConvertFrom-TvJson $Response[0] } else { Get-BandsintownEvent }
+$items = if ($Response) { ConvertFrom-WkJson $Response[0] } else { Get-BandsintownEvent }
 
 foreach ($item in ($items | Where-Object { $_ })) {
   if ($item.venue.region -ne 'ID') { continue }
 
   try {
     $venue = ConvertTo-PlainText $item.venue.name
-    $city = Resolve-TvCity $item.venue.city
+    $city = Resolve-WkCity $item.venue.city
     $title = if ($item.title) { ConvertTo-PlainText $item.title } else { "$($item.lineup -join ', ') at $venue" }
 
-    New-TvEvent -Title $title -Start (ConvertTo-BoiseTime $item.datetime) `
+    New-WkEvent -Title $title -Start (ConvertTo-LocalTime $item.datetime) `
       -Venue ($venue ? $venue : $Source.venue) -City ($city ? $city : $Source.city) `
       -Category $Source.category -InferCategory:([bool]$Source.inferCategory) -Url $item.url -Description $item.description `
       -Sources @(@{ name = $Source.name; url = $item.url; fetchedAt = $FetchedAt })

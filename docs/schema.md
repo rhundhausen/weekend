@@ -37,7 +37,7 @@ The rules are in [cost-tiers.md](cost-tiers.md): free is $0, and the breakpoints
 
 The price (`priceMin`, the cheapest adult ticket, face value) comes from, in order, and is never stored:
 
-1. The source's price data: Ticketmaster `priceRanges` (face value ranges before ranges that include fees), the tribe and calendarapp `cost` text (`ConvertFrom-TvPriceText`), schema.org `offers` (a price of 0 is ignored there, since sites use it as a placeholder), SeatGeek `lowest_price`, and the Eventbrite event page.
+1. The source's price data: Ticketmaster `priceRanges` (face value ranges before ranges that include fees), the tribe and calendarapp `cost` text (`ConvertFrom-WkPriceText`), schema.org `offers` (a price of 0 is ignored there, since sites use it as a placeholder), SeatGeek `lowest_price`, and the Eventbrite event page.
 2. The `free-admission` tag, which means 0.
 3. The description's price text, read before its price sentences are removed. In prose only phrases like "free admission" count as free.
 
@@ -68,19 +68,19 @@ How matching works:
 - A tag with a `category` needs a match in the title or the publisher's labels, such as tribe categories or Ticketmaster genres. Descriptions mention too many unrelated things to trust.
 - A tag with no `category` can also match the description.
 - By default an event takes its source's `category`. With `inferCategory` on the source, it takes the category its tags point to, and the source's `category` is the fallback.
-- When tags point to several categories, a title match beats a label. After that, the order in `Get-TvClassification` decides: holiday first, because a Christmas concert is a holiday event.
+- When tags point to several categories, a title match beats a label. After that, the order in `Get-WkClassification` decides: holiday first, because a Christmas concert is a holiday event.
 
 Matching is by keyword, so some events are misfiled. An event whose title is only an artist's name gets no tag unless the publisher labels it.
 
 ## Titles
 
-A title or venue in all capitals ("OLD BOISE MODEL RAILROAD") or all lowercase ("idaho art gallery") is changed to title case ("Old Boise Model Railroad", "Idaho Art Gallery"). Acronyms stay capitalized: words with no vowels (DJ, CSL), Roman numerals, and the words listed in `data/schema/title-case.json`, which also gives exact spellings (McCall) and the small words kept lowercase (of, the, in). All-lowercase text skips that list, since "us", "id", and "steam" are ordinary words in lowercase. A title with both cases, or of one word (often a band's own styling, such as KREAM), is left alone. The `id` is computed from the lowercased title, so it does not change. The code is `ConvertTo-TvTitleCase` in `ingestion/scripts/lib/Schema.ps1`.
+A title or venue in all capitals ("OLD BOISE MODEL RAILROAD") or all lowercase ("idaho art gallery") is changed to title case ("Old Boise Model Railroad", "Idaho Art Gallery"). Acronyms stay capitalized: words with no vowels (DJ, CSL), Roman numerals, and the words listed in `data/schema/title-case.json`, which also gives exact spellings (McCall) and the small words kept lowercase (of, the, in). All-lowercase text skips that list, since "us", "id", and "steam" are ordinary words in lowercase. A title with both cases, or of one word (often a band's own styling, such as KREAM), is left alone. The `id` is computed from the lowercased title, so it does not change. The code is `ConvertTo-WkTitleCase` in `ingestion/scripts/lib/Schema.ps1`.
 
 ## Venues
 
 Sources spell a venue in different ways: Ticketmaster has `Neurolux Lounge` and `Knitting Factory - Boise`, and aggregators have `Extra Mile Arena`. Those would count as separate venues and block merging, so `data/schema/venue-aliases.json` maps each spelling to one `venueKey` and name. It applies to every source, before the `id` is computed. To fix a split venue, add a line there. No code changes are needed.
 
-Some sources, mostly Boise Mom, give no city, so their events fall back to `Other`. After merging, refine looks for the city in the event's own venue, title, and description, from strongest clue to weakest: an Idaho ZIP code, "City, ID", "(City)" in the title, a city in the venue name, a known place, a venue other sources place in one city, "in" or "downtown" before a city, then a city named in the title or description. A clue that names two cities is ambiguous and leaves `Other`. Star, Payette, Emmett, Middleton, and Weiser are also everyday words or surnames, so they count only from a ZIP code or "City, ID". Known places (the Basque Block, Warhawk Air Museum) and names to ignore (Boise Cascade, Boise Hawks) are in `data/schema/place-cities.json`; add a line there to teach it a place. Only the city changes, so the `id` stays the same. The code is `Resolve-TvOtherCity` in `ingestion/scripts/lib/Cities.ps1`, and every refine run applies it to stored data, including the archive.
+Some sources, mostly Boise Mom, give no city, so their events fall back to `Other`. After merging, refine looks for the city in the event's own venue, title, and description, from strongest clue to weakest: an Idaho ZIP code, "City, ID", "(City)" in the title, a city in the venue name, a known place, a venue other sources place in one city, "in" or "downtown" before a city, then a city named in the title or description. A clue that names two cities is ambiguous and leaves `Other`. Star, Payette, Emmett, Middleton, and Weiser are also everyday words or surnames, so they count only from a ZIP code or "City, ID". Known places (the Basque Block, Warhawk Air Museum) and names to ignore (Boise Cascade, Boise Hawks) are in `data/schema/place-cities.json`; add a line there to teach it a place. Only the city changes, so the `id` stays the same. The code is `Resolve-WkOtherCity` in `ingestion/scripts/lib/Cities.ps1`, and every refine run applies it to stored data, including the archive.
 
 ## Size
 

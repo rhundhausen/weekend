@@ -1,10 +1,10 @@
 BeforeAll {
-  $script:gate = Join-Path $PSScriptRoot '..' '..' 'scripts' 'Test-BoiseHour.ps1'
+  $script:gate = Join-Path $PSScriptRoot '..' '..' 'scripts' 'Test-LocalHour.ps1'
   $script:winter = [DateTime]::new(2026, 12, 1)
   $script:summer = [DateTime]::new(2026, 7, 1)
 }
 
-Describe 'Test-BoiseHour' {
+Describe 'Test-LocalHour' {
   BeforeEach {
     $script:savedOutput = $env:GITHUB_OUTPUT
     $env:GITHUB_OUTPUT = ''

@@ -85,9 +85,9 @@ $logLine = & $zip $LogDir "$Kind-logs.zip" 'no job logs'
 $context.Attachment = if ($logLine -eq 'no job logs') { "$outLine; no job logs" } else { "$outLine, $logLine" }
 
 $report = if ($Kind -eq 'ingest') {
-  New-TvIngestReport -Run (& $read 'run.json') -Sources $sources -Context $context
+  New-WkIngestReport -Run (& $read 'run.json') -Sources $sources -Context $context
 } else {
-  New-TvRefineReport -Refine (& $read 'refine.json') -Links (& $read 'links.json') -Sources $sources -Context $context
+  New-WkRefineReport -Refine (& $read 'refine.json') -Links (& $read 'links.json') -Sources $sources -Context $context
 }
 
 if ($PreviewPath) {
@@ -101,5 +101,5 @@ if (-not $env:RESEND_API_KEY -or -not $env:REPORT_EMAIL) {
   exit 0
 }
 
-$sent = Send-TvReport -Report $report -To $env:REPORT_EMAIL -ApiKey $env:RESEND_API_KEY -Attachment $attachments.ToArray()
+$sent = Send-WkReport -Report $report -To $env:REPORT_EMAIL -ApiKey $env:RESEND_API_KEY -Attachment $attachments.ToArray()
 Write-Host "Emailed '$($report.Subject)' (Resend id $($sent.id))"

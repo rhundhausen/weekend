@@ -83,7 +83,7 @@ Describe 'sources.json categories' {
   }
 }
 
-Describe 'Get-TvClassification' {
+Describe 'Get-WkClassification' {
   It 'tags and categorizes <title>' -ForEach @(
     @{ title = 'Ballet Idaho presents The Nutcracker'; tag = 'nutcracker'; category = 'holiday-seasonal' }
     @{ title = 'Capital City Public Market Holiday Market'; tag = 'holiday-market'; category = 'holiday-seasonal' }
@@ -96,61 +96,61 @@ Describe 'Get-TvClassification' {
     @{ title = 'Monster Jam'; tag = 'motorsports'; category = 'sports' }
     @{ title = 'Stand-Up Comedy Showcase'; tag = 'comedy'; category = 'performing-arts' }
   ) {
-    $result = Get-TvClassification $title
+    $result = Get-WkClassification $title
     $result.Tags | Should -Contain $tag
     $result.Category | Should -Be $category
   }
 
   It 'puts the holiday ahead of the music' {
-    (Get-TvClassification 'Christmas Lights Concert').Category | Should -Be 'holiday-seasonal'
+    (Get-WkClassification 'Christmas Lights Concert').Category | Should -Be 'holiday-seasonal'
   }
 
   It 'does not take a category or a category tag from the description' {
-    $result = Get-TvClassification 'Saturday at the Park' 'Bring a chair for the concert and fireworks'
+    $result = Get-WkClassification 'Saturday at the Park' 'Bring a chair for the concert and fireworks'
     $result.Category | Should -BeNullOrEmpty
     @($result.Tags).Count | Should -Be 0
   }
 
   It 'takes tags with no category from the description' {
-    (Get-TvClassification 'Saturday at the Park' 'Great for kids. Free admission.').Tags | Should -Be @('free-admission', 'kids')
+    (Get-WkClassification 'Saturday at the Park' 'Great for kids. Free admission.').Tags | Should -Be @('free-admission', 'kids')
   }
 
   It 'uses publisher labels, decoding entities' {
-    $result = Get-TvClassification 'Karina Rykman' -Labels 'Arts &amp; Music'
+    $result = Get-WkClassification 'Karina Rykman' -Labels 'Arts &amp; Music'
     $result.Tags | Should -Contain 'concert'
     $result.Category | Should -Be 'music'
   }
 
   It 'matches labels against keywords too' {
-    (Get-TvClassification 'Jo Koy' -Labels 'Arts & Theatre', 'Comedy').Tags | Should -Contain 'comedy'
+    (Get-WkClassification 'Jo Koy' -Labels 'Arts & Theatre', 'Comedy').Tags | Should -Contain 'comedy'
   }
 
   It 'requires a whole label to match sourceLabels' {
-    (Get-TvClassification 'Show' -Labels 'Free Parking').Tags | Should -Not -Contain 'free-admission'
-    (Get-TvClassification 'Show' -Labels 'Free').Tags | Should -Contain 'free-admission'
+    (Get-WkClassification 'Show' -Labels 'Free Parking').Tags | Should -Not -Contain 'free-admission'
+    (Get-WkClassification 'Show' -Labels 'Free').Tags | Should -Contain 'free-admission'
   }
 
   It 'lets a title match beat a label' {
-    (Get-TvClassification 'Trivia Night' -Labels 'Arts & Music').Category | Should -Be 'food-drink'
+    (Get-WkClassification 'Trivia Night' -Labels 'Arts & Music').Category | Should -Be 'food-drink'
   }
 
   It 'matches across punctuation' {
-    (Get-TvClassification "Trick$([char]0x2013)Or$([char]0x2013)Treat at Lakeshore").Tags | Should -Contain 'halloween'
+    (Get-WkClassification "Trick$([char]0x2013)Or$([char]0x2013)Treat at Lakeshore").Tags | Should -Contain 'halloween'
   }
 
   It 'matches whole words only' {
-    (Get-TvClassification 'Marketing Mixer in Fairview').Tags | Should -Not -Contain 'fair'
-    (Get-TvClassification 'Zookeeper Talk').Tags | Should -Not -Contain 'zoo'
+    (Get-WkClassification 'Marketing Mixer in Fairview').Tags | Should -Not -Contain 'fair'
+    (Get-WkClassification 'Zookeeper Talk').Tags | Should -Not -Contain 'zoo'
   }
 
   It 'finds a tag with no category without choosing one' {
-    $result = Get-TvClassification 'Saturday for Kids'
+    $result = Get-WkClassification 'Saturday for Kids'
     $result.Tags | Should -Contain 'kids'
     $result.Category | Should -BeNullOrEmpty
   }
 
   It 'returns no tags for an unmatched title' {
-    @((Get-TvClassification 'Kyle Gordon').Tags).Count | Should -Be 0
+    @((Get-WkClassification 'Kyle Gordon').Tags).Count | Should -Be 0
   }
 }
 
@@ -181,27 +181,27 @@ Describe 'sizes.json' {
   }
 }
 
-Describe 'Get-TvEventSize' {
+Describe 'Get-WkEventSize' {
   It 'uses the venue' {
-    Get-TvEventSize -VenueKey 'extramile-arena' -Category 'music' | Should -Be 'XL'
-    Get-TvEventSize -VenueKey 'neurolux' -Category 'music' | Should -Be 'M'
+    Get-WkEventSize -VenueKey 'extramile-arena' -Category 'music' | Should -Be 'XL'
+    Get-WkEventSize -VenueKey 'neurolux' -Category 'music' | Should -Be 'M'
   }
 
   It 'lets a small-format tag beat the venue' {
-    Get-TvEventSize -VenueKey 'morrison-center' -Category 'arts-culture' -Tags 'workshop' | Should -Be 'S'
+    Get-WkEventSize -VenueKey 'morrison-center' -Category 'arts-culture' -Tags 'workshop' | Should -Be 'S'
   }
 
   It 'lets the venue beat other tags' {
-    Get-TvEventSize -VenueKey 'neurolux' -Category 'music' -Tags 'festival' | Should -Be 'M'
+    Get-WkEventSize -VenueKey 'neurolux' -Category 'music' -Tags 'festival' | Should -Be 'M'
   }
 
   It 'takes the largest tag at an unknown venue' {
-    Get-TvEventSize -VenueKey 'some-park' -Category 'community-civic' -Tags 'concert', 'fair' | Should -Be 'XL'
+    Get-WkEventSize -VenueKey 'some-park' -Category 'community-civic' -Tags 'concert', 'fair' | Should -Be 'XL'
   }
 
   It 'falls back to the category' {
-    Get-TvEventSize -VenueKey 'some-park' -Category 'festivals' | Should -Be 'L'
-    Get-TvEventSize -VenueKey 'some-park' -Category 'community-civic' -Tags 'kids' | Should -Be 'S'
+    Get-WkEventSize -VenueKey 'some-park' -Category 'festivals' | Should -Be 'L'
+    Get-WkEventSize -VenueKey 'some-park' -Category 'community-civic' -Tags 'kids' | Should -Be 'S'
   }
 }
 
@@ -211,7 +211,7 @@ Describe 'venue aliases' {
     $sizes = Get-Content (Join-Path $PSScriptRoot '..' '..' '..' 'data/schema/sizes.json') -Raw | ConvertFrom-Json -AsHashtable
     function New-AtVenue {
       param([string]$Venue)
-      New-TvEvent -Title 'Show' -Start '2026-11-14T19:30:00-07:00' -Venue $Venue -Category 'music' -Url 'https://x.test/e'
+      New-WkEvent -Title 'Show' -Start '2026-11-14T19:30:00-07:00' -Venue $Venue -Category 'music' -Url 'https://x.test/e'
     }
   }
 
@@ -255,11 +255,11 @@ Describe 'venue aliases' {
   }
 }
 
-Describe 'New-TvEvent classification' {
+Describe 'New-WkEvent classification' {
   BeforeAll {
     function New-TestEvent {
       param([string]$Title, [switch]$InferCategory)
-      New-TvEvent -Title $Title -Start '2026-11-14T19:30:00-07:00' -Venue 'Venue' -Url 'https://x.test/e' `
+      New-WkEvent -Title $Title -Start '2026-11-14T19:30:00-07:00' -Venue 'Venue' -Url 'https://x.test/e' `
         -Category 'community-civic' -InferCategory:$InferCategory
     }
   }
@@ -291,20 +291,20 @@ Describe 'New-TvEvent classification' {
   It 'rejects an unknown size' {
     $event = (New-TestEvent 'Show') | Select-Object *
     $event.size = 'XXL'
-    Test-TvEvent $event | Should -BeFalse
+    Test-WkEvent $event | Should -BeFalse
   }
 
   It 'requires a category' {
-    Test-TvEvent ((New-TestEvent 'Show') | Select-Object * -ExcludeProperty category) | Should -BeFalse
+    Test-WkEvent ((New-TestEvent 'Show') | Select-Object * -ExcludeProperty category) | Should -BeFalse
   }
 
   It 'rejects an old category id' {
-    { New-TvEvent -Title 'Show' -Start '2026-11-14T19:30:00-07:00' -Venue 'Venue' -Url 'https://x.test/e' -Category 'concerts' } |
+    { New-WkEvent -Title 'Show' -Start '2026-11-14T19:30:00-07:00' -Venue 'Venue' -Url 'https://x.test/e' -Category 'concerts' } |
       Should -Throw '*schema*'
   }
 }
 
-Describe 'Get-TvClassification fallback tags' {
+Describe 'Get-WkClassification fallback tags' {
   It 'puts "<title>" in <want>' -ForEach @(
     @{ title = 'Dungeons and Dragons'; labels = @('library'); want = 'nightlife-social' }
     @{ title = 'Dungeons & Dragons'; labels = @('library'); want = 'nightlife-social' }
@@ -314,10 +314,10 @@ Describe 'Get-TvClassification fallback tags' {
     @{ title = 'Teen Club | Hillcrest Library!'; labels = @(); want = 'learning-business' }
     @{ title = 'Fit and Fall Proof'; labels = @('library'); want = 'learning-business' }
   ) {
-    (Get-TvClassification $title '' -Labels $labels).Category | Should -Be $want
+    (Get-WkClassification $title '' -Labels $labels).Category | Should -Be $want
   }
 
   It 'still tags a library event as library-program when another tag sets the category' {
-    (Get-TvClassification 'Teen Club: Dungeons and Dragons | Cole & Ustick Library!' '').Tags | Should -Contain 'library-program'
+    (Get-WkClassification 'Teen Club: Dungeons and Dragons | Cole & Ustick Library!' '').Tags | Should -Contain 'library-program'
   }
 }

@@ -24,7 +24,7 @@ $failures = [System.Collections.Generic.List[string]]::new()
 
 function Read-JsonFile {
   param([string]$Path)
-  ConvertFrom-TvJson (Get-Content -LiteralPath $Path -Raw)
+  ConvertFrom-WkJson (Get-Content -LiteralPath $Path -Raw)
 }
 
 $categoryIds = @((Read-JsonFile (Join-Path $DataRoot 'data' 'schema' 'categories.json')).id)

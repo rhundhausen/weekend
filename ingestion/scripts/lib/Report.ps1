@@ -2,7 +2,7 @@
 # out/links.json, and sent with the Resend API. Each report is a list of sections, rendered
 # once as plain text and once as HTML so mail clients can pick.
 
-function Format-TvReportTime {
+function Format-WkReportTime {
   # An ISO UTC time as Boise time, such as "Nov 7, 2026 12:00:05 AM MST".
   param([string]$Value)
 
@@ -14,7 +14,7 @@ function Format-TvReportTime {
   "$($local.ToString('MMM d, yyyy h:mm:ss tt', [Globalization.CultureInfo]::InvariantCulture)) $abbreviation"
 }
 
-function Format-TvDuration {
+function Format-WkDuration {
   # The time between two ISO times, such as "5m 27s".
   param([string]$Start, [string]$Finish)
 
@@ -25,7 +25,7 @@ function Format-TvDuration {
   '{0}s' -f [int]$span.TotalSeconds
 }
 
-function New-TvReportSection {
+function New-WkReportSection {
   # Kind is 'pairs' (label and value) or 'table'. Rows are arrays of cells. A cell that is a
   # hashtable with Url renders as a link in HTML. Groups, when given, are sub-headings, each
   # with its own rows.
@@ -39,7 +39,7 @@ function New-TvReportSection {
   [pscustomobject]@{ Title = $Title; Kind = $Kind; Rows = @($Rows); Note = $Note; Groups = @($Groups) }
 }
 
-function ConvertTo-TvReportText {
+function ConvertTo-WkReportText {
   param([string]$Heading, [object[]]$Sections)
 
   $cellText = { param($cell) if ($cell -is [hashtable]) { "$($cell.Text)" } else { "$cell" } }
@@ -68,7 +68,7 @@ function ConvertTo-TvReportText {
   ($lines -join "`n") + "`n"
 }
 
-function ConvertTo-TvReportHtml {
+function ConvertTo-WkReportHtml {
   param([string]$Heading, [object[]]$Sections)
 
   $encode = { param($text) [Net.WebUtility]::HtmlEncode("$text") }
@@ -104,7 +104,7 @@ function ConvertTo-TvReportHtml {
   $parts -join "`n"
 }
 
-function Get-TvSourceLabel {
+function Get-WkSourceLabel {
   # "Display Name (name)", or the name alone when the source isn't known.
   param([string]$Name, [object[]]$Sources)
 
@@ -112,7 +112,7 @@ function Get-TvSourceLabel {
   if ($entry -and $entry.displayName) { "$($entry.displayName) ($Name)" } else { $Name }
 }
 
-function Get-TvWaitingSections {
+function Get-WkWaitingSections {
   # The sources that don't run yet, by status, so the report shows what's left to build.
   param([object[]]$Sources)
 
@@ -131,10 +131,10 @@ function Get-TvWaitingSections {
   $investigating = & $group 'investigating' 'Investigating' 'looked at, but something stands in the way (pages that need JavaScript, blocked scripts, no feed); the notes say what was tried'
   $ideas = & $group '' 'Ideas' 'suggested, not looked at yet'
   $ruledOut = & $group 'ruled-out' 'Ruled out' 'will not be used, for the reason given'
-  New-TvReportSection -Title "Not running: $($ready.Count) ready, $($investigating.Count) investigating, $($ideas.Count) ideas, $($ruledOut.Count) ruled out" -Groups @($ready, $investigating, $ideas, $ruledOut)
+  New-WkReportSection -Title "Not running: $($ready.Count) ready, $($investigating.Count) investigating, $($ideas.Count) ideas, $($ruledOut.Count) ruled out" -Groups @($ready, $investigating, $ideas, $ruledOut)
 }
 
-function New-TvIngestReport {
+function New-WkIngestReport {
   <#
   .SYNOPSIS
     The ingest summary email: Subject, Text, and Html.
@@ -157,14 +157,14 @@ function New-TvIngestReport {
 
   if (-not $Run) {
     $sections = @(
-      New-TvReportSection -Title 'What happened' -Kind pairs -Rows @(
+      New-WkReportSection -Title 'What happened' -Kind pairs -Rows @(
         , @('Result:', 'Ingest stopped before it wrote run.json, so no source results are available.')
         , @('Attached:', ($Context.Attachment ? "$($Context.Attachment)" : 'none'))
         , @('Workflow run:', $runLink)
       )
     )
     $heading = 'WeekendBoise Ingest FAILED: no run.json'
-    return @{ Subject = $heading; Text = ConvertTo-TvReportText $heading $sections; Html = ConvertTo-TvReportHtml $heading $sections }
+    return @{ Subject = $heading; Text = ConvertTo-WkReportText $heading $sections; Html = ConvertTo-WkReportHtml $heading $sections }
   }
 
   $results = @($Run.sources)
@@ -181,9 +181,9 @@ function New-TvIngestReport {
   $basics = @(
     , @('Result:', ($Context.Outcome ? "$($Context.Outcome)" : 'unknown'))
     , @('Trigger:', $trigger)
-    , @('Started:', (Format-TvReportTime $started))
-    , @('Finished:', (Format-TvReportTime $Run.finishedAt))
-    , @('Duration:', (Format-TvDuration $started $Run.finishedAt))
+    , @('Started:', (Format-WkReportTime $started))
+    , @('Finished:', (Format-WkReportTime $Run.finishedAt))
+    , @('Duration:', (Format-WkDuration $started $Run.finishedAt))
     , @('Sources:', "$($ok.Count) ok, $($failed.Count) failed, $events events fetched")
   )
   # Meetup groups are many and often have nothing scheduled, which is normal, so they get one line.
@@ -194,31 +194,31 @@ function New-TvIngestReport {
     $basics += , @('Meetup groups:', "$($meetupOk.Count) ok, $(@($meetupOk | Where-Object { $_.fetched -gt 0 }).Count) with events, $(($meetup | Measure-Object fetched -Sum).Sum) events")
   }
   if ($null -ne $Run.rawEvents) {
-    $basics += , @('Raw file:', "$($Run.rawSources) sources, $($Run.rawEvents) events, as of $(Format-TvReportTime $Run.asOf)$($Run.noWrite ? ' (not written)' : '')")
+    $basics += , @('Raw file:', "$($Run.rawSources) sources, $($Run.rawEvents) events, as of $(Format-WkReportTime $Run.asOf)$($Run.noWrite ? ' (not written)' : '')")
   }
   if ($Context.Attachment) { $basics += , @('Attached:', "$($Context.Attachment)") }
   $basics += , @('Workflow run:', $runLink)
 
   $sections = [Collections.Generic.List[object]]::new()
-  $sections.Add((New-TvReportSection -Title 'Run' -Kind pairs -Rows $basics))
-  $sections.Add((New-TvReportSection -Title "Failed ($($failed.Count))" -Note ($failed.Count ? 'A failed source keeps its last good events in the raw file.' : 'None.') -Rows @(
-        $failed | ForEach-Object { , @((Get-TvSourceLabel $_.name $Sources), @{ Text = (& $pageOf $_.name); Url = (& $pageOf $_.name) }, "$($_.error)") }
+  $sections.Add((New-WkReportSection -Title 'Run' -Kind pairs -Rows $basics))
+  $sections.Add((New-WkReportSection -Title "Failed ($($failed.Count))" -Note ($failed.Count ? 'A failed source keeps its last good events in the raw file.' : 'None.') -Rows @(
+        $failed | ForEach-Object { , @((Get-WkSourceLabel $_.name $Sources), @{ Text = (& $pageOf $_.name); Url = (& $pageOf $_.name) }, "$($_.error)") }
       )))
   $warned = @($results | Where-Object { @($_.warnings).Count -gt 0 })
-  $sections.Add((New-TvReportSection -Title "Warnings ($(($warned | ForEach-Object { @($_.warnings).Count } | Measure-Object -Sum).Sum ?? 0))" -Note ($warned.Count ? '' : 'None.') -Groups @(
-        $warned | ForEach-Object { [pscustomobject]@{ Title = (Get-TvSourceLabel $_.name $Sources); Rows = @($_.warnings | ForEach-Object { , @("$_") }) } }
+  $sections.Add((New-WkReportSection -Title "Warnings ($(($warned | ForEach-Object { @($_.warnings).Count } | Measure-Object -Sum).Sum ?? 0))" -Note ($warned.Count ? '' : 'None.') -Groups @(
+        $warned | ForEach-Object { [pscustomobject]@{ Title = (Get-WkSourceLabel $_.name $Sources); Rows = @($_.warnings | ForEach-Object { , @("$_") }) } }
       )))
   # Most events first, so the sources that returned 0 are at the end. A scraper whose site changed
   # looks like one of those.
-  $sections.Add((New-TvReportSection -Title "Succeeded ($($ok.Count))" -Rows @(
-        $ok | Sort-Object { -[int]$_.fetched } | ForEach-Object { , @(@{ Text = (Get-TvSourceLabel $_.name $Sources); Url = (& $pageOf $_.name) }, "$($_.fetched) events", "$($_.duration)") }
+  $sections.Add((New-WkReportSection -Title "Succeeded ($($ok.Count))" -Rows @(
+        $ok | Sort-Object { -[int]$_.fetched } | ForEach-Object { , @(@{ Text = (Get-WkSourceLabel $_.name $Sources); Url = (& $pageOf $_.name) }, "$($_.fetched) events", "$($_.duration)") }
       )))
-  $sections.Add((Get-TvWaitingSections $Sources))
+  $sections.Add((Get-WkWaitingSections $Sources))
 
-  @{ Subject = $subject; Text = ConvertTo-TvReportText $subject $sections; Html = ConvertTo-TvReportHtml $subject $sections }
+  @{ Subject = $subject; Text = ConvertTo-WkReportText $subject $sections; Html = ConvertTo-WkReportHtml $subject $sections }
 }
 
-function New-TvRefineReport {
+function New-WkRefineReport {
   <#
   .SYNOPSIS
     The refine summary email: Subject, Text, and Html.
@@ -244,14 +244,14 @@ function New-TvRefineReport {
 
   if (-not $Refine) {
     $sections = @(
-      New-TvReportSection -Title 'What happened' -Kind pairs -Rows @(
+      New-WkReportSection -Title 'What happened' -Kind pairs -Rows @(
         , @('Result:', 'Refine stopped before it wrote refine.json. The site was not updated.')
         , @('Attached:', ($Context.Attachment ? "$($Context.Attachment)" : 'none'))
         , @('Workflow run:', $runLink)
       )
     )
     $heading = 'WeekendBoise Refine FAILED: no refine.json'
-    return @{ Subject = $heading; Text = ConvertTo-TvReportText $heading $sections; Html = ConvertTo-TvReportHtml $heading $sections }
+    return @{ Subject = $heading; Text = ConvertTo-WkReportText $heading $sections; Html = ConvertTo-WkReportHtml $heading $sections }
   }
 
   $subject = "WeekendBoise Refine$($failedPrefix): $($Refine.upcoming) upcoming, $($Refine.links.broken) broken links ($($Refine.links.newBroken) new)"
@@ -263,10 +263,10 @@ function New-TvRefineReport {
   $basics = @(
     , @('Result:', ($Context.Outcome ? "$($Context.Outcome)" : 'unknown'))
     , @('Trigger:', "$($Context.Trigger)")
-    , @('Started:', (Format-TvReportTime $Refine.startedAt))
-    , @('Finished:', (Format-TvReportTime $Refine.finishedAt))
-    , @('Duration:', (Format-TvDuration $Refine.startedAt $Refine.finishedAt))
-    , @('Raw file:', "$($Refine.rawSources) sources, $($Refine.rawEvents) events, as of $(Format-TvReportTime $Refine.asOf)")
+    , @('Started:', (Format-WkReportTime $Refine.startedAt))
+    , @('Finished:', (Format-WkReportTime $Refine.finishedAt))
+    , @('Duration:', (Format-WkDuration $Refine.startedAt $Refine.finishedAt))
+    , @('Raw file:', "$($Refine.rawSources) sources, $($Refine.rawEvents) events, as of $(Format-WkReportTime $Refine.asOf)")
     , @('Upcoming published:', "$($Refine.upcoming)")
     , @('Moved to archive:', "$($Refine.past)")
     , @('Cities filled in:', "$($Refine.cityFixes)")
@@ -279,12 +279,12 @@ function New-TvRefineReport {
   $basics += , @('Workflow run:', $runLink)
 
   $sections = [Collections.Generic.List[object]]::new()
-  $sections.Add((New-TvReportSection -Title 'Run' -Kind pairs -Rows $basics))
+  $sections.Add((New-WkReportSection -Title 'Run' -Kind pairs -Rows $basics))
   $broken = @($Links.broken)
-  $sections.Add((New-TvReportSection -Title "Broken links ($($broken.Count))" -Note ($broken.Count ? 'These events show their title as plain text on the site. NEW means it broke tonight.' : 'None.') -Groups @(
+  $sections.Add((New-WkReportSection -Title "Broken links ($($broken.Count))" -Note ($broken.Count ? 'These events show their title as plain text on the site. NEW means it broke tonight.' : 'None.') -Groups @(
         $broken | Group-Object sources | Sort-Object Name | ForEach-Object {
           [pscustomobject]@{
-            Title = "$(Get-TvSourceLabel $_.Name $Sources): $($_.Count)"
+            Title = "$(Get-WkSourceLabel $_.Name $Sources): $($_.Count)"
             Rows  = @($_.Group | Sort-Object @{ e = { -not $_.new } }, start | ForEach-Object {
                 , @("$($_.new ? 'NEW ' : '')$($_.title)".Trim(), "$("$($_.start)".Substring(0, 10))", @{ Text = "$($_.url)"; Url = "$($_.url)" }, "$($_.reason)")
               })
@@ -293,21 +293,21 @@ function New-TvRefineReport {
       )))
   $lookupErrors = @($lookup.errors | Where-Object { $_ })
   if ($lookupErrors.Count) {
-    $sections.Add((New-TvReportSection -Title "City lookup errors ($($lookupErrors.Count))" -Note 'Pages the city lookup could not read. Their events keep their last known city and are tried again next run.' -Rows @(
+    $sections.Add((New-WkReportSection -Title "City lookup errors ($($lookupErrors.Count))" -Note 'Pages the city lookup could not read. Their events keep their last known city and are tried again next run.' -Rows @(
           $lookupErrors | ForEach-Object { , @("$_") }
         )))
   }
-  $sections.Add((New-TvReportSection -Title 'Upcoming events by category' -Rows @(
+  $sections.Add((New-WkReportSection -Title 'Upcoming events by category' -Rows @(
         $Refine.categories.PSObject.Properties | ForEach-Object { , @("$($_.Name)", "$($_.Value)") }
       )))
-  $sections.Add((New-TvReportSection -Title 'Upcoming events by source' -Note 'An event that several sources list counts for each.' -Rows @(
-        $Refine.sources.PSObject.Properties | Sort-Object { -[int]$_.Value } | ForEach-Object { , @((Get-TvSourceLabel $_.Name $Sources), "$($_.Value)") }
+  $sections.Add((New-WkReportSection -Title 'Upcoming events by source' -Note 'An event that several sources list counts for each.' -Rows @(
+        $Refine.sources.PSObject.Properties | Sort-Object { -[int]$_.Value } | ForEach-Object { , @((Get-WkSourceLabel $_.Name $Sources), "$($_.Value)") }
       )))
 
-  @{ Subject = $subject; Text = ConvertTo-TvReportText $subject $sections; Html = ConvertTo-TvReportHtml $subject $sections }
+  @{ Subject = $subject; Text = ConvertTo-WkReportText $subject $sections; Html = ConvertTo-WkReportHtml $subject $sections }
 }
 
-function Test-TvReminderDay {
+function Test-WkReminderDay {
   # True when the given UTC time is a Sunday in Boise: the Sunday midnight ingest sends the reminder.
   param([Parameter(Mandatory)][string]$At)
 
@@ -316,7 +316,7 @@ function Test-TvReminderDay {
   $local.DayOfWeek -eq [DayOfWeek]::Sunday
 }
 
-function New-TvLocalReminder {
+function New-WkLocalReminder {
   <#
   .SYNOPSIS
     The weekly email asking for a local ingest run: Subject, Text, and Html.
@@ -337,19 +337,19 @@ function New-TvLocalReminder {
   $rows = [Collections.Generic.List[object]]::new()
   foreach ($entry in $local) {
     $stored = if ($Raw -and $Raw.sources.PSObject.Properties[$entry.name]) { $Raw.sources.($entry.name) }
-    $last = if ($stored) { "last fetched $(Format-TvReportTime $stored.fetchedAt)" } else { 'never fetched' }
+    $last = if ($stored) { "last fetched $(Format-WkReportTime $stored.fetchedAt)" } else { 'never fetched' }
     $count = if ($stored) { "$(@($stored.events).Count) events" } else { '0 events' }
-    $rows.Add(@(@{ Text = (Get-TvSourceLabel $entry.name $Sources); Url = "$($entry.url)" }, $last, $count))
+    $rows.Add(@(@{ Text = (Get-WkSourceLabel $entry.name $Sources); Url = "$($entry.url)" }, $last, $count))
   }
   $actions = 'https://github.com/rhundhausen/weekendboise/actions/workflows/refine.yml'
   $sections = @(
-    New-TvReportSection -Title 'What this is for' -Rows @(
+    New-WkReportSection -Title 'What this is for' -Rows @(
       , @("Some sites turn away or time out on requests from GitHub's servers, which run in Microsoft Azure, but load fine from a home connection.")
       , @('The nightly ingest skips these local sources and keeps the events they returned last time, so their listings stay on the site.')
       , @('Running them from your PC once a week picks up their new and changed events. Nothing breaks if you skip a week.')
     )
-    New-TvReportSection -Title "Local sources ($($local.Count))" -Rows $rows.ToArray()
-    New-TvReportSection -Title 'How to run it' -Rows @(
+    New-WkReportSection -Title "Local sources ($($local.Count))" -Rows $rows.ToArray()
+    New-WkReportSection -Title 'How to run it' -Rows @(
       , @('1. Open PowerShell 7 in your weekendboise folder.')
       , @('2. Run: ./ingestion/scripts/Invoke-LocalIngest.ps1')
       , @('3. It pulls, runs the local sources, commits data/raw-events.json, and pushes. It takes a minute or two.')
@@ -358,12 +358,12 @@ function New-TvLocalReminder {
       , @('If a source fails from home too, the run says so; its last events stay on the site.')
     )
   )
-  if ($RunUrl) { $sections += New-TvReportSection -Title 'Sent by' -Kind pairs -Rows @(, @('Ingest run:', @{ Text = $RunUrl; Url = $RunUrl })) }
+  if ($RunUrl) { $sections += New-WkReportSection -Title 'Sent by' -Kind pairs -Rows @(, @('Ingest run:', @{ Text = $RunUrl; Url = $RunUrl })) }
 
-  @{ Subject = $subject; Text = ConvertTo-TvReportText $subject $sections; Html = ConvertTo-TvReportHtml $subject $sections }
+  @{ Subject = $subject; Text = ConvertTo-WkReportText $subject $sections; Html = ConvertTo-WkReportHtml $subject $sections }
 }
 
-function Send-TvReport {
+function Send-WkReport {
   <#
   .SYNOPSIS
     Sends a report with the Resend API. Returns Resend's response, which has the email id.

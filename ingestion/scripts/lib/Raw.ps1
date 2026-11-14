@@ -7,26 +7,26 @@
 #       "<name>": { "fetchedAt": "...", "events": [ ... ] }    the source's last good fetch
 #     }
 #   }
-# Events are as the adapters built them (New-TvEvent), before any merge, so an event two
+# Events are as the adapters built them (New-WkEvent), before any merge, so an event two
 # sources report appears once under each.
 
 . "$PSScriptRoot/Store.ps1"
 
-function Read-TvRawFile {
+function Read-WkRawFile {
   # The raw file, or nothing if it doesn't exist yet. Fails on a file that isn't one.
   [CmdletBinding()]
   param([Parameter(Mandatory, Position = 0)][string]$Path)
 
   if (-not (Test-Path -LiteralPath $Path)) { return }
-  $raw = ConvertFrom-TvJson (Get-Content -LiteralPath $Path -Raw)
+  $raw = ConvertFrom-WkJson (Get-Content -LiteralPath $Path -Raw)
   if ($raw -isnot [pscustomobject] -or -not $raw.asOf -or $null -eq $raw.sources) {
     throw "$Path is not a raw events file: it needs asOf and sources"
   }
   $raw
 }
 
-function Write-TvRawFile {
-  # 2-space JSON with LF line endings and a final newline, as Write-TvEventFile.
+function Write-WkRawFile {
+  # 2-space JSON with LF line endings and a final newline, as Write-WkEventFile.
   [CmdletBinding()]
   param(
     [Parameter(Mandatory, Position = 0)][string]$Path,
@@ -41,7 +41,7 @@ function Write-TvRawFile {
   [IO.File]::WriteAllText($Path, ($json -replace "`r`n", "`n") + "`n", [Text.UTF8Encoding]::new($false))
 }
 
-function Get-TvRawEvents {
+function Get-WkRawEvents {
   <#
   .SYNOPSIS
     Every source's events in one list.
@@ -63,7 +63,7 @@ function Get-TvRawEvents {
   }
 }
 
-function Update-TvRawFile {
+function Update-WkRawFile {
   <#
   .SYNOPSIS
     Builds the new raw file from the previous one and this run's fetches.
@@ -95,10 +95,10 @@ function Update-TvRawFile {
   foreach ($result in $Results | Where-Object Status -eq 'ok') {
     $events = @($result.Events | Where-Object { $_ })
     $old = $entries[$result.Name]
-    if ($old) { Restore-TvFetchedAt $events @($old.events | Where-Object { $_ }) }
+    if ($old) { Restore-WkFetchedAt $events @($old.events | Where-Object { $_ }) }
     $entries[$result.Name] = [pscustomobject][ordered]@{
       fetchedAt = $FetchedAt
-      events    = @(if ($events.Count) { Sort-TvEvents $events })
+      events    = @(if ($events.Count) { Sort-WkEvents $events })
     }
   }
 
