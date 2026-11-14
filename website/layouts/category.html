@@ -1,3 +1,3 @@
 {{- /* A category's own page, such as /auctions-estate-sales/ (from content/_content.gotmpl): the event
      grid, opened with that category chosen. */}}
-{{ define "main" }}{{ partial "grid.html" (dict "page" . "category" .Params.category) }}{{ end }}
+{{ define "main" }}{{ partial "grid.html" (dict "page" . "category" .Params.category "city" "") }}{{ end }}

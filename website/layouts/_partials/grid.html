@@ -1,7 +1,9 @@
 {{- /* The event grid: the home page, and each category's own page (layouts/category.html), which
-     opens with that category chosen. Context: dict "page" (the page) and "category" (its category
-     id, or "" on the home page). */}}
+     opens with that category chosen, and each city's own page (layouts/city.html), which opens with
+     that city chosen. Context: dict "page" (the page), "category" (its category id), and "city"
+     (its city name); both are "" where they don't apply. */}}
 {{- $category := .category | default "" }}
+{{- $cityPage := .city | default "" }}
 {{- /* Category chips, like the City options below, list only categories with at least one upcoming
      event in this build; one with none (such as Auctions and Estate Sales between sales) gets no chip
      until an event arrives. Presentation only: its sources still run nightly. */}}
@@ -16,6 +18,9 @@
      when exactly that category is chosen. */}}
 {{- $catPaths := dict }}
 {{- range partial "categories.html" . }}{{ $catPaths = merge $catPaths (dict .id (relURL (printf "%s/" .id))) }}{{ end }}
+{{- /* Every city's own page, likewise; a chosen city with no single category goes in the path. */}}
+{{- $cityPaths := dict }}
+{{- range hugo.Data.city.cities }}{{ $cityPaths = merge $cityPaths (dict . (relURL (printf "%s/" (urlize .)))) }}{{ end }}
 {{- /* Chip counts as the page first shows them (Meetup and library events hidden), so the chips
      are drawn by the build and app.js only updates them; drawing them later made the panel jump.
      A library event is held at a library (venue) or listed by a library's calendar (source id), the
@@ -76,14 +81,14 @@
 {{- $data := resources.FromString "data/events.json" ($list | jsonify) | fingerprint }}
 {{- $sourceNames := dict }}
 {{- range hugo.Data.sources.sources }}{{ if .name }}{{ $sourceNames = merge $sourceNames (dict .name .displayName) }}{{ end }}{{ end }}
-{{- $cfg := dict "events" $data.RelPermalink "categories" $cats "sizes" $sizes "sizeOrder" $sizeOrder "lastIngest" $lastIngest "sources" $sourceNames "phrases" (hugo.Data.display.phrases | default slice) "tz" $city.timeZone "aliases" ($city.searchAliases | default dict) "state" (slice $city.state.code $city.state.name) "catPaths" $catPaths "home" (relURL "/") "page" $category }}
+{{- $cfg := dict "events" $data.RelPermalink "categories" $cats "sizes" $sizes "sizeOrder" $sizeOrder "lastIngest" $lastIngest "sources" $sourceNames "phrases" (hugo.Data.display.phrases | default slice) "tz" $city.timeZone "aliases" ($city.searchAliases | default dict) "state" (slice $city.state.code $city.state.name) "catPaths" $catPaths "cityPaths" $cityPaths "home" (relURL "/") "page" $category "cityPage" $cityPage }}
 
 <header class="top">
   <div class="wrap">
     {{- /* The About chip sits at the right of the title line, so the line below never wraps on phones. */}}
     <div class="top-row">
-      {{- if $category }}
-      {{- /* On a category's page the site name links home, as on the About page. */}}
+      {{- if or $category $cityPage }}
+      {{- /* On a category's or city's page the site name links home, as on the About page. */}}
       <h1 class="brand"><a class="brand site-name" href="{{ relURL "/" }}"><span class="logo" aria-hidden="true"></span>{{ site.Title }}</a></h1>
       {{- else }}
       <h1 class="brand"><span class="logo" aria-hidden="true"></span>{{ site.Title }}</h1>
@@ -154,6 +159,8 @@
            then Other, then the city's cityListLast (such as Valley County) pinned last. */}}
       {{- $cityNames := slice }}
       {{- range hugo.Data.events }}{{ with .city }}{{ $cityNames = $cityNames | append . }}{{ end }}{{ end }}
+      {{- /* A city's own page keeps its option even with no upcoming events, so it shows as chosen. */}}
+      {{- with $cityPage }}{{ $cityNames = $cityNames | append . }}{{ end }}
       {{- $cityNames = $cityNames | uniq | sort }}
       {{- $last := slice "Other" | append ($city.cityListLast | default slice) }}
       {{- $cityOrder := slice }}
@@ -165,7 +172,7 @@
           <option value="">All cities</option>
           {{- range $cityOrder }}
           {{- $n := len (where hugo.Data.events "city" .) }}
-          {{- if gt $n 0 }}
+          {{- if or (gt $n 0) (eq . $cityPage) }}
           <option value="{{ . }}">{{ . }} ({{ $n | lang.FormatNumber 0 }})</option>
           {{- end }}
           {{- end }}
@@ -247,6 +254,8 @@
   {{- /* Links to every category's own page, for people and for search engines. */}}
   <p class="browse">Browse by category:
     {{- range $i, $c := sort (partial "categories.html" .) "label" }}{{ if $i }},{{ end }} <a href="{{ index $catPaths $c.id }}">{{ $c.label }}</a>{{ end }}</p>
+  <p class="browse">Browse by city:
+    {{- range $i, $c := sort hugo.Data.city.cities }}{{ if $i }},{{ end }} <a href="{{ index $cityPaths $c }}">{{ $c }}</a>{{ end }}</p>
   {{- /* The feedback link opens a new GitHub issue with the title filled in; it needs a GitHub account. */}}
   {{- $feedback := querify "title" "Feedback: " "body" "What's on your mind (a wrong listing, a missing event, an idea):\n" }}
   <p>Every listing links to the organizer's own page. Collected nightly from public calendars and APIs by <a href="https://github.com/{{ $city.repo }}">{{ $city.siteName }}</a>. We welcome feedback. Spot a mistake, miss an event, or have an idea? <a href="{{ print "https://github.com/" $city.repo "/issues/new?" $feedback }}" rel="noopener" target="_blank">Create a GitHub issue</a>.</p>

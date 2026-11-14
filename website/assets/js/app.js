@@ -504,7 +504,9 @@ function readUrl() {
   const cats = p.has('cat') ? p.get('cat') : (cfg.page || '');
   state.cats = new Set(cats.split(',').filter((c) => c in cfg.categories));
   // A saved link to a city that has no events now (so it isn't listed) shows all cities.
-  state.city = [...el.city.options].some((o) => o.value && o.value === p.get('city')) ? p.get('city') : '';
+  // A city's own page (/meridian/) opens with that city; a city in the query string wins.
+  const city = p.has('city') ? p.get('city') : (cfg.cityPage || '');
+  state.city = [...el.city.options].some((o) => o.value && o.value === city) ? city : '';
   state.size = p.get('size') || '';
   state.cost = ['free', '1', '2', '3'].includes(p.get('cost')) ? p.get('cost') : '';
   state.source = p.get('source') || '';
@@ -525,13 +527,15 @@ function readUrl() {
 function writeUrl() {
   const p = new URLSearchParams();
   // One chosen category that has its own page goes in the path (/auctions-estate-sales/), so the
-  // address is the page to share. Any other choice goes in the query string on the home page.
+  // address is the page to share; with no such category, a chosen city's page does (/meridian/).
+  // Any other choice goes in the query string (/music/?city=Meridian).
   const only = state.cats.size === 1 ? [...state.cats][0] : '';
   const catPath = only && cfg.catPaths ? cfg.catPaths[only] : '';
-  const path = catPath || cfg.home || location.pathname;
+  const cityPath = !catPath && state.city && cfg.cityPaths ? cfg.cityPaths[state.city] : '';
+  const path = catPath || cityPath || cfg.home || location.pathname;
   if (state.q) p.set('q', state.q);
   if (state.cats.size && !catPath) p.set('cat', [...state.cats].join(','));
-  if (state.city) p.set('city', state.city);
+  if (state.city && !cityPath) p.set('city', state.city);
   if (state.size) p.set('size', state.size);
   if (state.cost) p.set('cost', state.cost);
   if (state.source) p.set('source', state.source);

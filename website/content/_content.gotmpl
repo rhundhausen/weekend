@@ -20,3 +20,24 @@
     "sitemap" (dict "changefreq" "daily" "priority" 0.8)
   ) }}
 {{- end }}
+
+{{- /* One page per city in city.json, such as /meridian/ or /garden-city/: the grid opened with that
+     city chosen (layouts/city.html). A city whose path would clash with a category or one of the
+     site's own paths is left out, with a build warning. */}}
+{{- $taken := slice "about" "sources" "api" "css" "js" "data" "icons" }}
+{{- range hugo.Data.vocabulary.categories }}{{ $taken = $taken | append .id }}{{ end }}
+{{- range $city.cities }}
+  {{- $slug := urlize . }}
+  {{- if in $taken $slug }}
+    {{- warnf "city %q has no page of its own: its path /%s/ is already a category or a site path" . $slug }}
+  {{- else }}
+    {{- $.AddPage (dict
+      "kind" "page"
+      "path" $slug
+      "title" (printf "Events in %s" .)
+      "params" (dict "city" . "description" (printf "Upcoming events in %s, %s: concerts, theater, festivals, markets, library programs, classes, sports, and more. Updated every night by {site}." . $city.state.name))
+      "layout" "city"
+      "sitemap" (dict "changefreq" "daily" "priority" 0.8)
+    ) }}
+  {{- end }}
+{{- end }}
