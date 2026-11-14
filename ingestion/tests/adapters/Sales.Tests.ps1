@@ -11,10 +11,11 @@ BeforeAll {
     }
   }
 
-  # Runs the adapter on one response and returns the events, keeping the drop counts it reports.
+  # Runs the adapter on one response (or, for the page modes, one per page) and returns the events,
+  # keeping the drop counts it reports.
   function Invoke-Sales {
-    param([pscustomobject]$Source, [string]$Text)
-    $output = & $adapter -Source $Source -FetchedAt $fetchedAt -Response @($Text) -Verbose 4>&1
+    param([pscustomobject]$Source, [string[]]$Text)
+    $output = & $adapter -Source $Source -FetchedAt $fetchedAt -Response $Text -Verbose 4>&1
     $script:summary = @($output | Where-Object { $_ -is [System.Management.Automation.VerboseRecord] } | ForEach-Object Message) -join "`n"
     @($output | Where-Object { $_ -isnot [System.Management.Automation.VerboseRecord] })
   }
@@ -220,65 +221,88 @@ Describe 'sales adapter, onthewater mode' {
   }
 }
 
-Describe 'sales adapter, file mode (EstateSales.NET)' {
+Describe 'sales adapter, estatesales-net mode (EstateSales.NET city pages)' {
   BeforeAll {
-    $source = New-SaleSource 'file' 'estatesales-net' 'https://www.estatesales.net' 'EstateSales.NET'
-    $source | Add-Member path 'data/events-additional.json'
-    $file = @'
-[
-  { "title": "Garden City estate sale", "start": "2026-11-12T08:30:00-07:00", "end": "2026-11-13T14:00:00-07:00",
-    "allDay": false, "venue": "Boise, ID 83703", "city": "Boise", "url": "https://www.estatesales.net/ID/Boise/83703/1",
-    "description": "Estate Sale" },
-  { "title": "**ENTIRE HOUSE MOVING SALE – EVERYTHING $1 EACH!**", "start": "2026-11-13T09:00:00-07:00", "end": "2026-11-14T15:00:00-07:00",
-    "allDay": false, "venue": "Meridian, ID 83642", "city": "Boise", "url": "https://www.estatesales.net/ID/Meridian/83642/2" },
-  { "title": "Online Only Auction", "start": "2026-11-15T09:00:00-07:00", "venue": "Boise, ID 83709", "url": "https://www.estatesales.net/ID/Boise/83709/3" },
-  { "title": "Twin Falls Estate Sale", "start": "2026-11-15T09:00:00-07:00", "venue": "Twin Falls, ID 83301", "url": "https://www.estatesales.net/ID/Twin-Falls/83301/4" },
-  { "title": "Other Site Sale", "start": "2026-11-19T09:00:00-07:00", "venue": "Boise, ID 83705",
-    "url": "https://estatesales.org/estate-sales/id/boise/83705/other-site-sale" },
-  { "title": "Weekend Sale", "start": "2026-11-21", "end": "2026-11-22", "allDay": true, "city": "Nampa", "url": "https://www.estatesales.net/ID/Nampa/83651/5" }
-]
-'@
-    $script:kept = Invoke-Sales $source $file
-    $script:fileSummary = $script:summary
+    $source = New-SaleSource 'estatesales-net' 'estatesales-net' 'https://www.estatesales.net' 'EstateSales.NET'
+    $source | Add-Member pages @('/ID/Boise')
+    $page = Get-Content (Join-Path $PSScriptRoot '..' 'fixtures' 'sales' 'estatesales-net-boise.html') -Raw
+    $script:kept = Invoke-Sales $source @($page)
+    $script:netSummary = $script:summary
+    # The same sale is on every nearby city's page, so a second page with it adds nothing.
+    $script:twice = Invoke-Sales $source @($page, $page)
   }
 
-  It 'keeps in-person sales in covered cities, keeping times as given' {
-    @($kept.title).Count | Should -Be 3
-    $kept[0].start | Should -Be '2026-11-12T08:30:00-07:00'
-    $kept[0].end | Should -Be '2026-11-13T14:00:00-07:00'
-    $kept[2].allDay | Should -BeTrue
-    $kept[2].start | Should -Be '2026-11-21'
+  It 'keeps estate sales, moving sales, and business closings in covered cities' {
+    @($kept).Count | Should -Be 5
+    @($kept.city) | Should -Be @('Boise', 'Boise', 'Meridian', 'Eagle', 'Boise')
   }
 
-  It 'takes the town from the venue before the city' {
-    @($kept.city) | Should -Be @('Boise', 'Meridian', 'Nampa')
+  It 'runs a sale from its first day''s start to its last day''s end, in city time' {
+    $kept[0].start | Should -Be '2026-11-19T09:00:00-07:00'
+    $kept[0].end | Should -Be '2026-11-21T14:00:00-07:00'
   }
 
-  It 'removes Markdown emphasis from titles' {
-    $kept[1].title | Should -Not -Match '\*'
-    $kept[1].title | Should -Match 'Moving Sale'
-  }
-
-  It 'drops the part of a title that has a price' {
+  It 'removes Markdown emphasis and the part of a title with a price' {
+    $kept[0].title | Should -Be 'Update Nice Hillcrest View Dr 3-Day Estate Sale'
     $kept[1].title | Should -Be 'Entire House Moving Sale'
   }
 
-  It 'stores only the title, company, city, times, and link' {
+  It 'links each sale''s own page and stores only the title, company, city, times, and link' {
+    $kept[0].url | Should -Be 'https://www.estatesales.net/ID/Boise/83705/5138340'
     $kept[0].venue | Should -Be 'EstateSales.NET'
-    $kept[0].url | Should -Be 'https://www.estatesales.net/ID/Boise/83703/1'
     $kept[0].PSObject.Properties.Name | Should -Not -Contain 'description'
     $kept[0].sources[0].name | Should -Be 'estatesales-net'
   }
 
-  It 'reports what the in-person rule and the city filter dropped' {
-    $fileSummary | Should -Match 'kept 3'
-    $fileSummary | Should -Match '1 dropped by the in-person rule'
-    $fileSummary | Should -Match '1 dropped by the city filter'
+  It 'drops other kinds of listing, online auctions, other states, and uncovered cities' {
+    $netSummary | Should -Match 'kept 5'
+    $netSummary | Should -Match '2 dropped by the in-person rule'
+    $netSummary | Should -Match '2 dropped by the city filter'
   }
 
-  It 'skips entries that link to another site' {
-    @($kept.url) | Should -Not -Match 'estatesales\.org'
-    $fileSummary | Should -Match '1 entries from other sites skipped'
+  It 'reads each sale once when two pages list it' {
+    @($twice).Count | Should -Be 5
+  }
+
+  It 'needs pages in sources.json' {
+    $bare = New-SaleSource 'estatesales-net' 'estatesales-net' 'https://www.estatesales.net' 'EstateSales.NET'
+    { & $adapter -Source $bare -FetchedAt $fetchedAt } | Should -Throw '*no pages*'
+  }
+}
+
+Describe 'sales adapter, estatesales-org mode (EstateSales.org city pages)' {
+  BeforeAll {
+    $source = New-SaleSource 'estatesales-org' 'estatesales-org' 'https://estatesales.org' 'EstateSales.org'
+    $source | Add-Member pages @('/estate-sales/id/boise')
+    $page = Get-Content (Join-Path $PSScriptRoot '..' 'fixtures' 'sales' 'estatesales-org-boise.html') -Raw
+    $script:kept = Invoke-Sales $source @($page)
+    $script:orgSummary = $script:summary
+  }
+
+  It 'keeps in-person sales in covered cities' {
+    @($kept).Count | Should -Be 5
+    @($kept.city) | Should -Be @('Meridian', 'Meridian', 'Eagle', 'Boise', 'Kuna')
+  }
+
+  It 'reads "Sale starts" as a timed start in city time' {
+    $boise = $kept | Where-Object city -eq 'Boise'
+    $boise.start | Should -Be '2026-11-19T09:00:00-07:00'
+    $boise.allDay | Should -BeFalse
+  }
+
+  It 'reads "Sale ends" (a sale already open) as all-day on its last day' {
+    $kept[0].start | Should -Be '2026-11-15'
+    $kept[0].allDay | Should -BeTrue
+  }
+
+  It 'links each sale''s own page, which it does not fetch' {
+    ($kept | Where-Object city -eq 'Kuna').url | Should -Be 'https://estatesales.org/estate-sales/id/kuna/83634/a-little-fringe-a-lot-2472583'
+    $kept[0].venue | Should -Be 'EstateSales.org'
+  }
+
+  It 'drops online auctions and sales outside the state' {
+    $orgSummary | Should -Match 'kept 5'
+    $orgSummary | Should -Match '2 dropped by the in-person rule'
   }
 }
 

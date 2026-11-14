@@ -23,8 +23,10 @@
       "displayName": "EstateSales.NET",
       "status": "running",
       "adapter": "sales",
-      "salesMode": "file",
-      "path": "data/events-additional.json",
+      "salesMode": "estatesales-net",
+      "pages": [
+        "/ID/Boise"
+      ],
       "category": "auctions-estate-sales",
       "venue": "EstateSales.NET",
       "venueKey": "estatesales-net",

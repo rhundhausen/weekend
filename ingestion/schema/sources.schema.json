@@ -222,18 +222,21 @@
         },
         "salesMode": {
           "type": "string",
-          "description": "sales: ics reads an Events Calendar iCal export (Downs Auction), corbett reads the upcoming auctions on corbettauctions.com's home page, onthewater reads the UPCOMING SALES lines on onthewaterestatesales.com, file reads a JSON array of events from the repository file named by path (EstateSales.NET). Every mode keeps only in-person events in covered cities, and stores only title, company, city, times, and link. See adapters/sales.ps1.",
+          "description": "sales: ics reads an Events Calendar iCal export (Downs Auction), corbett reads the upcoming auctions on corbettauctions.com's home page, onthewater reads the UPCOMING SALES lines on onthewaterestatesales.com, estatesales-net reads EstateSales.NET city pages and estatesales-org reads EstateSales.org city pages (both listed in pages). Every mode keeps only in-person events in covered cities, and stores only title, company, city, times, and link. See adapters/sales.ps1.",
           "enum": [
             "corbett",
-            "file",
+            "estatesales-net",
+            "estatesales-org",
             "ics",
             "onthewater"
           ]
         },
-        "path": {
-          "type": "string",
-          "description": "sales, file mode: the JSON file to read, relative to the repository root, such as data/events-additional.json.",
-          "minLength": 1
+        "pages": {
+          "type": "array",
+          "description": "sales, estatesales-net and estatesales-org: the listing pages to read, each resolved against url, such as /ID/Boise or /estate-sales/id/boise. Each is checked against robots.txt and read once a night, at least 1 second apart.",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1,
+          "uniqueItems": true
         },
         "eventLinkPattern": {
           "type": "string",
@@ -585,6 +588,27 @@
           "then": {
             "required": [
               "salesMode"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "name",
+              "salesMode"
+            ],
+            "properties": {
+              "salesMode": {
+                "enum": [
+                  "estatesales-net",
+                  "estatesales-org"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "pages"
             ]
           }
         },

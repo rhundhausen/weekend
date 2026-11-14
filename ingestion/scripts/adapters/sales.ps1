@@ -3,8 +3,9 @@
 .SYNOPSIS
   Reads auctions and estate sales, for the Auctions and Estate Sales category.
 .DESCRIPTION
-  One request a night per source (plus robots.txt), checked against robots.txt and spaced by its
-  Crawl-delay. No link on the page is followed. Every mode applies the same rules (lib/Sales.ps1):
+  One request a night per source page (plus robots.txt once per site), checked against robots.txt
+  and spaced by its Crawl-delay, at least 1 second apart. No link on a page is followed. Every mode
+  applies the same rules (lib/Sales.ps1):
 
   - In-person only. Anything whose title or text says "online", and anything with no street
     address or place, is dropped (the in-person rule).
@@ -30,12 +31,22 @@
     runs from the first day's opening to the last day's close when the page lists hours for those
     days ("Saturday, November 21 | 9:00 AM - 2:00 PM"), and is all-day otherwise. Its link is the
     sales page, which is all the site has.
-  - file: a JSON array in the site's event format, read from the repository file named by path
-    (EstateSales.NET, data/events-additional.json, which ingest-additional writes nightly with the
-    site's permission). Nothing is fetched, and only entries linking to the source's own site are
-    read, since the file can hold other sites' listings. The town comes from "Town, ID" in each venue, else its
-    city. Markdown emphasis and any title part with a price are removed, and the description is
-    read only for the in-person rule.
+  - estatesales-net: EstateSales.NET city pages (/ID/<City>), one per entry in the source's pages,
+    read with the site's permission. Each page holds its sales in its server-rendered state
+    (script#estatesales-net-state, NGRX_STATE.ui.sales.saleRows, keyed by sale id), with each day's
+    UTC start and end. A sale runs from its first day's start to its last day's end. Estate sales,
+    moving sales, and business closings are kept; other kinds, and sales with an online auction
+    link, are not. Its link is the sale's page (/<ST>/<City>/<ZIP>/<id>), which is not fetched.
+  - estatesales-org: EstateSales.org city pages (/estate-sales/id/<city>), one per entry in the
+    source's pages, read with the site's permission. Each sale is a card (div.card with
+    data-auction-id) with its title, type, "City, ID ZIP", and one time: "Sale starts Fri. Nov 20,
+    2026 at 9:00 AM MST" for a sale yet to open, read as a timed event at that start, or "Sale ends
+    Sun. Nov 15, 2026 at 4:00 PM MST" for one already open, read as an all-day event on its last
+    day. The hours of each day are only on the sale page, which is not fetched. Only in-person
+    types are kept: the pages also list online auctions from other states.
+  A sale near several cities is on each of their pages, so the page modes read each sale id once.
+  Their titles lose Markdown emphasis ("**MOVING SALE**") and any part with a price ("Everything $1
+  Each!"), since no prices are stored.
 .PARAMETER Source
   One entry from sources.json.
 .PARAMETER FetchedAt
@@ -66,12 +77,6 @@ function Get-SalesText {
   # The source's page, after checking robots.txt and waiting out its Crawl-delay.
   if ($Response) { return $Response[0] }
 
-  # File mode reads a file in the repository that the site's own data is delivered to; nothing is fetched.
-  if ($Source.salesMode -eq 'file') {
-    $file = Get-WkCityPath $Source.path
-    if (-not (Test-Path -LiteralPath $file)) { throw "$($Source.name): $($Source.path) does not exist" }
-    return Get-Content -LiteralPath $file -Raw
-  }
 
   $uri = [uri]$Source.url
   $robots = try { Invoke-WkRequest "$($uri.GetLeftPart('Authority'))/robots.txt" -Raw } catch {
@@ -83,6 +88,56 @@ function Get-SalesText {
   if ($delay -gt 60) { throw "$($Source.name): robots.txt asks for $delay seconds between requests" }
   Start-Sleep -Seconds $delay
   Invoke-WkRequest $uri.AbsoluteUri -Raw
+}
+
+function Get-SalesPages {
+  # The source's listing pages (pages, each resolved against url), for the page modes. robots.txt
+  # is read once per site; each page is checked against it and waits out its Crawl-delay (at least
+  # 1 second). A page that fails is a warning; the source fails only when every page does.
+  if ($Response) { return @($Response) }
+  $pages = @($Source.pages | Where-Object { $_ })
+  if (-not $pages) { throw "$($Source.name): no pages to read" }
+
+  $robotsBySite = @{}
+  $texts = [Collections.Generic.List[string]]::new()
+  $failures = 0
+  foreach ($page in $pages) {
+    try {
+      $uri = [uri]::new([uri]$Source.url, $page)
+      $site = $uri.GetLeftPart('Authority')
+      if (-not $robotsBySite.ContainsKey($site)) {
+        $robotsBySite[$site] = try { Invoke-WkRequest "$site/robots.txt" -Raw } catch {
+          # No robots.txt means no restrictions. Any other failure means we can't tell, so stop.
+          if ("$_" -match 'HTTP 404') { '' } else { throw }
+        }
+      }
+      $robots = $robotsBySite[$site]
+      if (-not (Test-WkRobotsAllowed $robots $uri.PathAndQuery)) { throw "robots.txt disallows $($uri.PathAndQuery)" }
+      $delay = [Math]::Max(1, [int](Get-WkRobotsGroup $robots).Delay)
+      if ($delay -gt 60) { throw "robots.txt asks for $delay seconds between requests" }
+      Start-Sleep -Seconds $delay
+      $texts.Add((Invoke-WkRequest $uri.AbsoluteUri -Raw))
+    } catch {
+      $failures++
+      Write-Warning "$($Source.name): skipping page $($page): $_"
+    }
+  }
+  if ($texts.Count -eq 0) { throw "$($Source.name): all $failures pages failed" }
+  , $texts.ToArray()
+}
+
+function ConvertTo-SaleTitle {
+  # A listing's title without Markdown emphasis ("**MOVING SALE**") or a part with a price
+  # ("Moving Sale - Everything $1 Each!" to "Moving Sale"), since no prices are stored.
+  param([AllowEmptyString()][string]$Title)
+
+  $title = ((ConvertTo-PlainText $Title) -replace '\*\*|__|(?<!\w)[*_](?=\S)|(?<=\S)[*_](?!\w)', '' -replace '\s+', ' ').Trim()
+  if ($title -match '\$\s?\d') {
+    $dash = "\s+[-$([char]0x2013)$([char]0x2014)]\s+|\s*[|:]\s*"
+    $parts = @($title -split $dash | Where-Object { $_ -and $_ -notmatch '\$\s?\d' })
+    $title = if ($parts) { $parts -join ' - ' } else { ($title -replace '[^.!?]*\$\s?\d[^.!?]*[.!?]?', '').Trim() }
+  }
+  $title
 }
 
 function Add-Sale {
@@ -224,51 +279,109 @@ function Read-OnTheWaterSales {
   }
 }
 
-function Read-FileSales {
-  # A JSON array of events in the site's event format (title, start, end, allDay, venue, city, url,
-  # description). Only what the other modes keep is passed on; the description is read for the
-  # in-person rule and then dropped.
-  param([string]$Text)
+function Read-EstateSalesNetSales {
+  param([string[]]$Pages)
 
-  $items = try { @($Text | ConvertFrom-WkJson) } catch { throw "$($Source.name): $($Source.path) is not valid JSON: $_" }
-  # The file can hold listings from more than one site. Only this source's site gave permission,
-  # so only entries linking to its host are read.
-  $siteHost = ([uri]$Source.url).Host -replace '^www\.', ''
-  $otherSites = 0
-  foreach ($item in $items) {
-    $itemHost = if ("$($item.url)" -match '^https?://([^/:?#]+)') { $Matches[1].ToLowerInvariant() -replace '^www\.', '' }
-    if ($itemHost -ne $siteHost) {
-      $otherSites++
+  $kinds = @('EstateSales', 'MovingSales', 'BusinessClosings')
+  $state = (Get-WkCity).state.code
+  $site = ([uri]$Source.url).GetLeftPart('Authority')
+  $seen = [Collections.Generic.HashSet[string]]::new()
+  foreach ($html in $Pages) {
+    $match = [regex]::Match($html, '(?s)<script id="estatesales-net-state"[^>]*>(?<json>.*?)</script>')
+    if (-not $match.Success) {
+      Write-Warning "$($Source.name): a page has no estatesales-net-state data, so it lists no sales"
       continue
     }
-    if (-not $item.title -or -not $item.start) {
-      Write-Warning "$($Source.name): skipping an entry with no title or start"
-      continue
+    # The page's transfer state escapes these characters as &q; and the like; &a; (&) goes last.
+    $json = $match.Groups['json'].Value -replace '&q;', '"' -replace '&s;', "'" -replace '&l;', '<' -replace '&g;', '>' -replace '&a;', '&'
+    $rows = (ConvertFrom-Json $json -AsHashtable -Depth 100).NGRX_STATE.ui.sales.saleRows
+    if (-not $rows) { continue }
+
+    foreach ($row in $rows.Values) {
+      if (-not $seen.Add("$($row.id)")) { continue }
+      $title = ConvertTo-SaleTitle "$($row.name)"
+      if ("$($row.typeName)" -notin $kinds) {
+        $script:dropped['in-person']++
+        Write-Verbose "$($Source.name): '$title' dropped by the in-person rule (a $($row.typeName) listing)"
+        continue
+      }
+      if ("$($row.stateCode)" -ne $state) {
+        $script:dropped.city++
+        Write-Verbose "$($Source.name): '$title' dropped by the city filter ($($row.cityName), $($row.stateCode))"
+        continue
+      }
+      $days = @($row.dates | Where-Object { $_.utcStartDate._value } | Sort-Object { [DateTimeOffset]"$($_.utcStartDate._value)" })
+      if (-not $title -or -not $days) {
+        Write-Warning "$($Source.name): skipping sale $($row.id), which has no title or no dates"
+        continue
+      }
+      $start = ConvertTo-LocalTime $days[0].utcStartDate._value
+      $end = if ($days[-1].utcEndDate._value) { ConvertTo-LocalTime $days[-1].utcEndDate._value }
+      $url = '{0}/{1}/{2}/{3}/{4}' -f $site, $row.stateCode, ("$($row.cityName)".Trim() -replace '\s+', '-'), $row.postalCodeNumber, $row.id
+      $event = @{ Title = $title; Start = $start; Url = $url }
+      if ($end -and [DateTimeOffset]$end -gt [DateTimeOffset]$start) { $event.End = $end }
+      # A listing that links an online auction is bidding, not a sale to go to.
+      $text = if ($row.auctionUrl) { 'online auction' } else { '' }
+      Add-Sale -Title $title -Text $text -Town "$($row.cityName)" -Event $event
     }
-    # Markdown emphasis ("**MOVING SALE**") is not part of the title.
-    $title = ((ConvertTo-PlainText "$($item.title)") -replace '\*\*|__|(?<!\w)[*_](?=\S)|(?<=\S)[*_](?!\w)', '' -replace '\s+', ' ').Trim()
-    # No prices are stored, so a title part with one ("Moving Sale - Everything $1 Each!") is dropped.
-    $dash = "\s+[-$([char]0x2013)$([char]0x2014)]\s+|\s*[|:]\s*"
-    $parts = @($title -split $dash | Where-Object { $_ -and $_ -notmatch '\$\s?\d' })
-    if ($title -match '\$\s?\d') {
-      $title = if ($parts) { $parts -join ' - ' } else { ($title -replace '[^.!?]*\$\s?\d[^.!?]*[.!?]?', '').Trim() }
-    }
-    $town = Find-WkSaleTown "$($item.venue)"
-    if (-not $town) { $town = "$($item.city)".Trim() }
-    $event = @{ Title = $title; Start = "$($item.start)"; Url = if ($item.url) { "$($item.url)" } else { $Source.url } }
-    if ($item.end -and "$($item.end)" -ne "$($item.start)") { $event.End = "$($item.end)" }
-    if ($item.allDay) { $event.AllDay = $true }
-    Add-Sale -Title $title -Text "$($item.description)" -Town $town -Event $event
   }
-  Write-Verbose "$($Source.name): $otherSites entries from other sites skipped"
 }
 
-$text = Get-SalesText
+function Read-EstateSalesOrgSales {
+  param([string[]]$Pages)
+
+  $site = ([uri]$Source.url).GetLeftPart('Authority')
+  $seen = [Collections.Generic.HashSet[string]]::new()
+  foreach ($html in $Pages) {
+    foreach ($card in ([regex]::Split($html, 'data-auction-id="') | Select-Object -Skip 1)) {
+      $id = ($card -split '"', 2)[0]
+      if (-not $seen.Add($id)) { continue }
+
+      $titleMatch = [regex]::Match($card, '(?s)class="card__title[^"]*"[^>]*>(?<body>.*?)</h3>')
+      $title = ConvertTo-SaleTitle $titleMatch.Groups['body'].Value
+      $href = [regex]::Match($titleMatch.Groups['body'].Value, 'href="(?<h>[^"]+)"').Groups['h'].Value
+      $type = ConvertTo-PlainText ([regex]::Match($card, '(?s)class="card__type[^"]*"[^>]*>(?<body>.*?)</div>').Groups['body'].Value)
+      $location = ConvertTo-PlainText ([regex]::Match($card, '(?s)class="card__location[^"]*"[^>]*>(?<body>.*?)</div>').Groups['body'].Value)
+      $at = $card.IndexOf('class="card__dates"')
+      $dateText = if ($at -ge 0) { ConvertTo-PlainText ($card.Substring($at) -replace '(?s)<svg\b.*?</svg>', ' ' -replace '(?s)<!--.*?-->', ' ') } else { '' }
+
+      if (-not $title) { continue }
+      if ($type -notmatch '(?i)\bin-person\b') {
+        $script:dropped['in-person']++
+        Write-Verbose "$($Source.name): '$title' dropped by the in-person rule ($type)"
+        continue
+      }
+      $when = [regex]::Match($dateText, "(?i)\bsale\s+(?<kind>starts|ends)\s+\w+\.?\s+(?<m>$months)\.?\s+(?<d>\d{1,2}),?\s+(?:(?<y>\d{4})\s+)?at\s+(?<t>$clock)")
+      if (-not $when.Success) {
+        Write-Warning "$($Source.name): skipping '$title', whose card gives no sale time"
+        continue
+      }
+      $date = Get-WkNextDate -Month $when.Groups['m'].Value -Day ([int]$when.Groups['d'].Value) -Today $today
+      if ($when.Groups['y'].Success) { $date = $when.Groups['y'].Value + $date.Substring(4) }
+      $url = if ($href) { [uri]::new([uri]$site, [Net.WebUtility]::HtmlDecode($href)).AbsoluteUri } else { $Source.url }
+      $event = @{ Title = $title; Url = $url }
+      if ($when.Groups['kind'].Value -ieq 'starts') {
+        $event.Start = ConvertTo-WkSaleTime $date $when.Groups['t'].Value
+      } else {
+        # Already open: only its closing time is on the card, so it lists as all-day on its last day.
+        $event.Start = $date
+        $event.AllDay = $true
+      }
+      if (-not $event.Start) {
+        Write-Warning "$($Source.name): skipping '$title', whose sale time '$($when.Groups['t'].Value)' can't be read"
+        continue
+      }
+      Add-Sale -Title $title -Text $type -Town (Find-WkSaleTown $location) -Event $event
+    }
+  }
+}
+
 switch ($Source.salesMode) {
-  'ics' { Read-IcsSales $text }
-  'corbett' { Read-CorbettSales $text }
-  'onthewater' { Read-OnTheWaterSales $text }
-  'file' { Read-FileSales $text }
+  'ics' { Read-IcsSales (Get-SalesText) }
+  'corbett' { Read-CorbettSales (Get-SalesText) }
+  'onthewater' { Read-OnTheWaterSales (Get-SalesText) }
+  'estatesales-net' { Read-EstateSalesNetSales (Get-SalesPages) }
+  'estatesales-org' { Read-EstateSalesOrgSales (Get-SalesPages) }
   default { throw "$($Source.name): unknown salesMode '$($Source.salesMode)'" }
 }
 Write-Verbose "$($Source.name): kept $kept, $($dropped['in-person']) dropped by the in-person rule, $($dropped['real-estate']) dropped as real estate, $($dropped.city) dropped by the city filter"
