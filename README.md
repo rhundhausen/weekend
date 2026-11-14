@@ -1,6 +1,6 @@
 # weekend
 
-The shared engine behind the Weekend city event sites. It reads public event calendars, feeds,
+The shared engine and code behind the Weekend city event sites. It reads public event calendars, feeds,
 and APIs, normalizes events to one schema, merges duplicates, checks links, and builds a static
 Hugo site from the result.
 
@@ -8,7 +8,7 @@ Hugo site from the result.
 
 This repo holds only code every city shares:
 
-- `ingestion/scripts`: PowerShell 7 adapters, libraries, and the ingest, refine, publish, and
+- `ingestion/scripts`: PowerShell adapters, libraries, and the ingest, refine, publish, and
   report scripts.
 - `ingestion/schema`: the event and source JSON schemas.
 - `ingestion/tests`: Pester tests and their fixtures.
