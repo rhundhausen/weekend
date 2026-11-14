@@ -500,7 +500,9 @@ function syncControls() {
 function readUrl() {
   const p = new URLSearchParams(location.search);
   state.q = p.get('q') || '';
-  state.cats = new Set((p.get('cat') || '').split(',').filter((c) => c in cfg.categories));
+  // A category's own page (/music/) opens with that category; a cat in the query string wins.
+  const cats = p.has('cat') ? p.get('cat') : (cfg.page || '');
+  state.cats = new Set(cats.split(',').filter((c) => c in cfg.categories));
   // A saved link to a city that has no events now (so it isn't listed) shows all cities.
   state.city = [...el.city.options].some((o) => o.value && o.value === p.get('city')) ? p.get('city') : '';
   state.size = p.get('size') || '';
@@ -522,8 +524,13 @@ function readUrl() {
 
 function writeUrl() {
   const p = new URLSearchParams();
+  // One chosen category that has its own page goes in the path (/auctions-estate-sales/), so the
+  // address is the page to share. Any other choice goes in the query string on the home page.
+  const only = state.cats.size === 1 ? [...state.cats][0] : '';
+  const catPath = only && cfg.catPaths ? cfg.catPaths[only] : '';
+  const path = catPath || cfg.home || location.pathname;
   if (state.q) p.set('q', state.q);
-  if (state.cats.size) p.set('cat', [...state.cats].join(','));
+  if (state.cats.size && !catPath) p.set('cat', [...state.cats].join(','));
   if (state.city) p.set('city', state.city);
   if (state.size) p.set('size', state.size);
   if (state.cost) p.set('cost', state.cost);
@@ -540,7 +547,7 @@ function writeUrl() {
   if (state.per !== DEFAULT_PER) p.set('per', String(state.per));
   if (state.page > 1) p.set('page', String(state.page));
   const qs = p.toString();
-  history.replaceState(null, '', qs ? `?${qs}` : location.pathname);
+  history.replaceState(null, '', qs ? `${path}?${qs}` : path);
 }
 
 function resetAll() {

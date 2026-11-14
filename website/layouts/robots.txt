@@ -1,0 +1,9 @@
+{{- /* robots.txt for every city site (the city's hugo.toml sets enableRobotsTXT). Everything may be
+     read; the sitemap lists the home page, each category's page, About, and Sources. The site's
+     own /api/ is for the page's visitor log, not for crawlers. Cloudflare may add its managed
+     content signals above this. */ -}}
+User-agent: *
+Disallow: /api/
+Allow: /
+
+Sitemap: https://{{ hugo.Data.city.domain }}/sitemap.xml

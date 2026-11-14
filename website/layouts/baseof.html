@@ -6,8 +6,20 @@
   <title>{{ if .IsHome }}{{ site.Title }}{{ else }}{{ .Title }} | {{ site.Title }}{{ end }}</title>
   {{- /* City facts come from the city repo's city.json, mounted as data/city.json. */}}
   {{- $city := hugo.Data.city }}
-  {{- /* A page's description may say {site} for the site's name. */}}
-  <meta name="description" content="{{ replace (.Description | default $city.description) "{site}" site.Title }}">
+  {{- /* A page's description may say {site} for the site's name. Category pages carry theirs in
+       params (content/_content.gotmpl). */}}
+  {{- $description := replace (.Description | default .Params.description | default $city.description) "{site}" site.Title }}
+  <meta name="description" content="{{ $description }}">
+  {{- /* For search engines and link previews (chat apps, social sites). The address is always the
+       city's own domain, so a preview build or a ?query copy of a page points at the real page. */}}
+  {{- $url := printf "https://%s%s" $city.domain .RelPermalink }}
+  <link rel="canonical" href="{{ $url }}">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="{{ site.Title }}">
+  <meta property="og:title" content="{{ if .IsHome }}{{ site.Title }}{{ else }}{{ .Title }}{{ end }}">
+  <meta property="og:description" content="{{ $description }}">
+  <meta property="og:url" content="{{ $url }}">
+  <meta property="og:image" content="https://{{ $city.domain }}/icons/day/icon-512.png">
   <meta name="color-scheme" content="light dark">
   {{- /* The day icons until the script below picks the look; without JavaScript they stay. */}}
   <link id="icon-ico" rel="icon" href="{{ relURL "icons/day/favicon.ico" }}" sizes="any">

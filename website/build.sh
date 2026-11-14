@@ -25,6 +25,8 @@ fi
 # The city's IANA zone, so Hugo's dates match the site's. Node ships with Cloudflare's build image.
 TZ="$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('$CITY_JSON', 'utf8')).timeZone)")"
 export TZ
+# The site's address, so the sitemap's links are absolute (pages still link each other by path).
+DOMAIN="$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('$CITY_JSON', 'utf8')).domain)")"
 export HUGO_CACHEDIR="${PWD}/.cache/hugo"
 
 if ! hugo version 2>/dev/null | grep -q "v${HUGO_VERSION}"; then
@@ -50,4 +52,4 @@ rm -rf worker/test worker/node_modules
 
 # The city's hugo.toml mounts ../data, ../ingestion/sources.json, and ../city.json, so the full
 # city repo is needed; Cloudflare clones it and runs this from website/.
-hugo build --gc --minify --themesDir "$(dirname "$ENGINE")" --theme "$(basename "$ENGINE")"
+hugo build --gc --minify --baseURL "https://${DOMAIN}/" --themesDir "$(dirname "$ENGINE")" --theme "$(basename "$ENGINE")"

@@ -1,0 +1,22 @@
+{{- /* One page per category, such as /auctions-estate-sales/: the event grid opened with that
+     category chosen (layouts/category.html), with its own title and description for search
+     engines and link previews. Every category gets a page, with or without upcoming events, so a
+     shared or indexed link keeps working. Categories are the engine's ingestion/vocabulary, with a
+     category's includes replaced by the city's data/schema/categories.json, as on the About page. */}}
+{{- $city := hugo.Data.city }}
+{{- $local := dict }}
+{{- range hugo.Data.schema.categories }}{{ $local = merge $local (dict .id .includes) }}{{ end }}
+{{- range hugo.Data.vocabulary.categories }}
+  {{- $includes := index $local .id | default .includes }}
+  {{- /* city.json's description reads "Upcoming events in <area>."; the area is reused here. */}}
+  {{- $area := $city.description | replaceRE `^Upcoming events in (.*?)\.?$` "$1" }}
+  {{- $description := printf "Upcoming %s in %s: %s. Updated every night by {site}." (lower .label) $area (delimit $includes ", ") }}
+  {{- $.AddPage (dict
+    "kind" "page"
+    "path" .id
+    "title" (printf "%s in %s" .label $city.cityName)
+    "params" (dict "category" .id "description" $description)
+    "layout" "category"
+    "sitemap" (dict "changefreq" "daily" "priority" 0.8)
+  ) }}
+{{- end }}
