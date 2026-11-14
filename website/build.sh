@@ -35,7 +35,14 @@ if ! hugo version 2>/dev/null | grep -q "v${HUGO_VERSION}"; then
   export PATH="${HOME}/.local/bin:${PATH}"
 fi
 hugo version
-echo "Engine: ${ENGINE} ($(git -C "$ENGINE" rev-parse --short HEAD 2>/dev/null || echo 'not a git checkout'))"
+
+# The commits being built, for the version line on the About page (site.Params.enginecommit and
+# sitecommit). Cloudflare's build sets WORKERS_CI_COMMIT_SHA if the city checkout has no history.
+ENGINE_COMMIT="$(git -C "$ENGINE" rev-parse --short=7 HEAD 2>/dev/null || true)"
+SITE_COMMIT="$(git -C .. rev-parse --short=7 HEAD 2>/dev/null || true)"
+if [ -z "$SITE_COMMIT" ] && [ -n "${WORKERS_CI_COMMIT_SHA:-}" ]; then SITE_COMMIT="${WORKERS_CI_COMMIT_SHA:0:7}"; fi
+export HUGO_PARAMS_ENGINECOMMIT="$ENGINE_COMMIT" HUGO_PARAMS_SITECOMMIT="$SITE_COMMIT"
+echo "Engine: ${ENGINE} (${ENGINE_COMMIT:-not a git checkout}), site: ${SITE_COMMIT:-unknown}"
 
 rm -rf worker
 cp -R "$ENGINE/website/worker" worker
