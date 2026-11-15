@@ -94,9 +94,8 @@
 
 <footer class="wrap foot">
   <p>Collected nightly from public calendars and APIs by <a href="https://github.com/{{ $city.repo }}">{{ $city.siteName }}</a>. <a href="{{ print $newIssue $suggest }}" rel="noopener" target="_blank">Suggest something</a>.</p>
-  {{- /* Version: the build's date and time (24-hour) in the city's time zone, such as 2026.11.14.1530,
-       so every build has its own number. */}}
-  {{- $local := (time.AsTime "2000-01-01T00:00:00" $city.timeZone).Location }}
-  <p class="version">Version {{ (now.In $local).Format "2006.01.02.1504" }}</p>
+  {{- /* Version: the engine commit's date and time (24-hour, UTC), such as 2026.11.15.0042, which
+       website/build.sh passes in. Every city on the same engine shows the same version. */}}
+  <p class="version">Version {{ site.Params.version | default ((now.UTC).Format "2006.01.02.1504") }}</p>
 </footer>
 {{ end }}

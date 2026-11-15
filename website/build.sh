@@ -47,6 +47,14 @@ SITE_COMMIT="$(git -C .. rev-parse --short=7 HEAD 2>/dev/null || true)"
 if [ -z "$SITE_COMMIT" ] && [ -n "${WORKERS_CI_COMMIT_SHA:-}" ]; then SITE_COMMIT="${WORKERS_CI_COMMIT_SHA:0:7}"; fi
 echo "Engine: ${ENGINE} (${ENGINE_COMMIT:-not a git checkout}), site: ${SITE_COMMIT:-unknown}"
 
+# The version on the About page: the engine commit's time in UTC, such as 2026.11.15.0042, so every
+# city built from the same engine shows the same version, and it changes only when the engine does.
+# Outside a git checkout, the build time in UTC.
+VERSION="$(TZ=UTC git -C "$ENGINE" log -1 --date=format-local:%Y.%m.%d.%H%M --format=%cd 2>/dev/null || true)"
+[ -n "$VERSION" ] || VERSION="$(TZ=UTC date +%Y.%m.%d.%H%M)"
+export HUGO_PARAMS_VERSION="$VERSION"
+echo "Version: ${VERSION}"
+
 rm -rf worker
 cp -R "$ENGINE/website/worker" worker
 rm -rf worker/test worker/node_modules
