@@ -94,16 +94,9 @@
 
 <footer class="wrap foot">
   <p>Collected nightly from public calendars and APIs by <a href="https://github.com/{{ $city.repo }}">{{ $city.siteName }}</a>. <a href="{{ print $newIssue $suggest }}" rel="noopener" target="_blank">Suggest something</a>.</p>
-  {{- /* Calendar version: the build date in the city's time zone, and the commits of the engine and
-       this city's repo that built it (website/build.sh passes them in as site params). */}}
+  {{- /* Version: the build's date and time (24-hour) in the city's time zone, such as 2026.11.14.1530,
+       so every build has its own number. */}}
   {{- $local := (time.AsTime "2000-01-01T00:00:00" $city.timeZone).Location }}
-  {{- $engine := site.Params.enginecommit }}
-  {{- $site := site.Params.sitecommit }}
-  <p class="version">Version {{ (now.In $local).Format "2006.01.02" }}
-    {{- if or $engine $site }} (
-      {{- with $engine }}engine <a href="https://github.com/rhundhausen/weekend/commit/{{ . }}">{{ . }}</a>{{ end }}
-      {{- if and $engine $site }}, {{ end }}
-      {{- with $site }}site <a href="https://github.com/{{ $city.repo }}/commit/{{ . }}">{{ . }}</a>{{ end }})
-    {{- end }}</p>
+  <p class="version">Version {{ (now.In $local).Format "2006.01.02.1504" }}</p>
 </footer>
 {{ end }}
