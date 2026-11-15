@@ -788,3 +788,64 @@ Describe 'scrape adapter, sveltekit (Star Chamber)' {
     { & $adapter -Source (Get-TestSource 'star-chamber') -FetchedAt $fetchedAt -Response '<html></html>' } | Should -Throw '*no SvelteKit data*'
   }
 }
+
+Describe 'scrape adapter, iheart (a station calendar)' {
+  BeforeAll {
+    $events = @(& $adapter -Source (Get-TestSource 'test-iheart') -FetchedAt $fetchedAt -Response (Get-Fixture 'iheart-calendar.html') | Sort-Object start, title)
+    $byTitle = @{}
+    $events | ForEach-Object { $byTitle["$($_.title) $($_.start)"] = $_ }
+    $foy = $events | Where-Object title -eq 'Foy Vance'
+  }
+
+  It 'keeps only upcoming events at an address in the city, each once' {
+    $events.title | Should -Be @('Foy Vance', 'Eagle Fun Night', 'Two Nights', 'Two Nights', 'Holiday Market')
+  }
+
+  It 'skips an event in another state, even in a town of the same name' {
+    $events.title | Should -Not -Contain 'Wrong State Show'
+    $events.title | Should -Not -Contain 'Kurt Vile & the Violators'
+  }
+
+  It 'skips an event with no address' {
+    $events.title | Should -Not -Contain 'Colorado Gives Day'
+  }
+
+  It 'reads the start in the city time zone, ignoring milliseconds' {
+    $foy.start | Should -Be '2026-11-20T19:00:00-07:00'
+    $foy.end | Should -BeNullOrEmpty
+  }
+
+  It 'takes the venue and city from the record' {
+    $foy.venue | Should -Match 'Knitting Factory'
+    $foy.city | Should -Be 'Boise'
+  }
+
+  It 'places an unknown town by its ZIP code, and reads the end' {
+    $eagle = $events | Where-Object title -eq 'Eagle Fun Night'
+    $eagle.city | Should -Be 'Eagle'
+    $eagle.start | Should -Be '2026-11-21T18:30:00-07:00'
+    $eagle.end | Should -Be '2026-11-21T21:00:00-07:00'
+  }
+
+  It 'reads an event with its start time hidden as all-day' {
+    $market = $events | Where-Object title -eq 'Holiday Market'
+    $market.start | Should -Be '2026-12-05'
+    $market.allDay | Should -BeTrue
+    $market.city | Should -Be 'Meridian'
+  }
+
+  It 'makes one event per date' {
+    @($events | Where-Object title -eq 'Two Nights').start | Should -Be @('2026-11-27T19:00:00-07:00', '2026-11-28T19:00:00-07:00')
+  }
+
+  It 'links the event page and keeps the text without prices' {
+    $foy.url | Should -Be 'https://ktst.iheart.com/calendar/content/2026-11-20-foy-vance/'
+    $foy.description | Should -Be 'All Ages. Doors: 6PM | Show: 7PM.'
+    $foy.description | Should -Not -Match '\$'
+    $foy.category | Should -Be 'music'
+  }
+
+  It 'fails when the page has no iHeart page data' {
+    { & $adapter -Source (Get-TestSource 'test-iheart') -FetchedAt $fetchedAt -Response '<html></html>' } | Should -Throw '*no iHeart page data*'
+  }
+}

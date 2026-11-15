@@ -16,7 +16,9 @@
   city calendar (Calendar.aspx), one month per page. With scrapeMode chambermaster, they come from
   a ChamberMaster or GrowthZone chamber calendar: the month pages list the events, and each
   event's iCal file gives its details. With scrapeMode sveltekit, they come from the calendar a
-  SvelteKit chamber site embeds as page data. See docs/sources.md.
+  SvelteKit chamber site embeds as page data. With scrapeMode iheart, they come from the records an
+  iHeart station's calendar page embeds as page data, kept only at addresses in the city's area. See
+  docs/sources.md.
 .PARAMETER Source
   One entry from sources.json.
 .PARAMETER FetchedAt
@@ -32,6 +34,7 @@ param(
 )
 
 . "$PSScriptRoot/../lib/Schema.ps1"
+. "$PSScriptRoot/../lib/Cities.ps1"
 . "$PSScriptRoot/../lib/Http.ps1"
 . "$PSScriptRoot/../lib/Scrape.ps1"
 . "$PSScriptRoot/../lib/Ics.ps1"
@@ -550,7 +553,110 @@ function Read-SvelteKitSource {
   }
 }
 
+function Get-IHeartCity {
+  # The city of an iHeart venue address ("1135 13th Street, Boulder, CO, 80302" or "1902 Blake St,
+  # Denver, CO 80202-1230, United States"), or $null when it is outside the city's area. The
+  # address must name the city's state; then a part that is one of the city's cities (or its
+  # aliases) decides, or else a ZIP code the city knows.
+  param([string]$Address)
+
+  $state = Get-WkStatePattern
+  $parts = @($Address -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+  if (-not ($parts | Where-Object { $_ -match "^($state)(\s+\d{5}(-\d{4})?)?$" })) { return $null }
+  foreach ($part in $parts) {
+    $city = Resolve-WkCity $part
+    if ($city) { return $city }
+  }
+  # Only a ZIP code after the state, or standing alone, so a street number is never read as one.
+  $zips = Get-WkZipCities
+  foreach ($part in $parts) {
+    if ($part -match "^(?:(?:$state)\s+)?(?<zip>\d{5})(-\d{4})?$" -and $zips[$Matches['zip']]) { return $zips[$Matches['zip']] }
+  }
+  $null
+}
+
+function Read-IHeartSource {
+  # An iHeart station's calendar (such as kbco.iheart.com/calendar/), in one request: the page
+  # embeds its records in window.__PRELOADED_STATE__. Each content:calendar record has fields title,
+  # venue_name, venue_address, event_date (one or more begin times in ms since 1970, with an end
+  # when set) and hide_event_start_time (an all-day event), and its categories as
+  # calendar-categories/<id> tags, which feed tag matching. A station covers a whole metro, so only
+  # events at an address in the city's area are kept; one with no address (a station promotion)
+  # is skipped.
+  $html = if ($Response) { $Response[0] } else { Get-ScrapePage $listUri }
+  $match = [regex]::Match($html, '(?s)window\.__PRELOADED_STATE__\s*=\s*(?<d>\{.*?\})\s*;?\s*</script>')
+  if (-not $match.Success) { throw "$($Source.name): no iHeart page data on the page" }
+  $state = $match.Groups['d'].Value | ConvertFrom-Json -Depth 100 -AsHashtable
+
+  # The records sit deep in the page state, and some appear in more than one cache entry.
+  $records = [System.Collections.Generic.List[object]]::new()
+  $seen = @{}
+  $stack = [System.Collections.Generic.Stack[object]]::new()
+  $stack.Push($state)
+  while ($stack.Count) {
+    $node = $stack.Pop()
+    if ($node -is [System.Collections.IDictionary]) {
+      if ($node['type'] -eq 'content:calendar' -and $node['payload'] -is [System.Collections.IDictionary]) {
+        $key = "$($node['ref_id'])|$($node['slug'])"
+        if (-not $seen[$key]) { $seen[$key] = $true; $records.Add($node) }
+        continue
+      }
+      foreach ($value in $node.Values) { if ($value -is [System.Collections.IDictionary] -or $value -is [System.Collections.IList]) { $stack.Push($value) } }
+    } elseif ($node -is [System.Collections.IList]) {
+      foreach ($value in $node) { if ($value -is [System.Collections.IDictionary] -or $value -is [System.Collections.IList]) { $stack.Push($value) } }
+    }
+  }
+  if (-not $records.Count) { throw "$($Source.name): no calendar records in the iHeart page data" }
+
+  foreach ($record in $records) {
+    $fields = $record.payload.fields
+    $title = ''
+    try {
+      $title = ConvertTo-PlainText "$($fields.title.value)"
+      if (-not $title) { throw 'no title' }
+      if ($Source.excludeTitlePattern -and $title -match $Source.excludeTitlePattern) { continue }
+      $city = Get-IHeartCity (ConvertTo-PlainText "$($fields.venue_address.value)")
+      if (-not $city) { continue }
+
+      $venueName = ConvertTo-PlainText "$($fields.venue_name.value)"
+      $url = if ($record.payload.canonical_url) { $record.payload.canonical_url } else { $record.payload.permalink }
+      $labels = @($record.subscription | ForEach-Object { $_.tags } | Where-Object { "$_" -like 'calendar-categories/*' } |
+        ForEach-Object { ("$_" -replace '^calendar-categories/', '') -replace '-', ' ' })
+      # The page's own text, one line per paragraph or heading ("Fox Theatre", "All Ages", "Doors: 6PM
+      # | Show: 7PM"). Each line becomes a sentence, so a line with a price is dropped on its own;
+      # lines that only repeat the title or venue, or say TICKETS, are left out.
+      $lines = foreach ($block in @($fields.blocks.value | Where-Object { $_.type -eq 'html' })) {
+        foreach ($line in ("$($block.value)" -split '(?i)</p>|</h\d>|<br\s*/?>|</li>')) {
+          $text = (ConvertTo-PlainText $line).Trim(' ', '>', '<')
+          if ($text -and $text -ne $title -and $text -ne $venueName -and $text -notmatch '^(?i)tickets?\W*$') { if ($text -match '[.!?]$') { $text } else { "$text." } }
+        }
+      }
+      $description = (@($lines) -join ' ').Trim()
+      $allDay = [bool]$fields.hide_event_start_time.value
+
+      foreach ($date in @($fields.event_date.value)) {
+        $begin = [DateTimeOffset]::FromUnixTimeSeconds([long][Math]::Floor([double]$date.begin / 1000))
+        $start = ConvertTo-LocalTime $begin
+        if ($start.Substring(0, 10) -lt $today) { continue }
+        $end = $null
+        if ($allDay) {
+          $start = $start.Substring(0, 10)
+        } elseif ([double]$date.end -gt [double]$date.begin) {
+          $end = ConvertTo-LocalTime ([DateTimeOffset]::FromUnixTimeSeconds([long][Math]::Floor([double]$date.end / 1000)))
+        }
+        New-WkEvent -Title $title -Start $start -End $end -AllDay:$allDay `
+          -Venue ($venueName ? $venueName : $Source.venue) -VenueKey ($venueName ? (Get-VenueKey $venueName) : $Source.venueKey) `
+          -City $city -Category $Source.category -InferCategory:([bool]$Source.inferCategory) -Labels $labels `
+          -Url $url -Description $description -Sources @(@{ name = $Source.name; url = $url; fetchedAt = $FetchedAt })
+      }
+    } catch {
+      Write-Warning "$($Source.name): skipping '$title': $_"
+    }
+  }
+}
+
 switch ($Source.scrapeMode) {
+  'iheart' { Read-IHeartSource }
   'jsonld' { Read-JsonLdSource }
   'cards' { Read-CardsSource }
   'calendarapp' { Read-CalendarAppSource }
