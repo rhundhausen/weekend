@@ -124,7 +124,8 @@ jobs:
       # [skip ci], because the site doesn't read the raw file. Refine starts after this run and its
       # commit deploys.
       - name: Commit raw data
-        run: ./.core/ingestion/scripts/Publish-Data.ps1 -Path data/raw-events.json -Message 'data: raw ingest' -SkipDeploy
+        run: |
+          ./.core/ingestion/scripts/Publish-Data.ps1 -Path data/raw-events.json -Message 'data: raw ingest' -SkipDeploy
 
   # The summary email, in its own job because GitHub serves a job's log only once that job has
   # finished, and the email attaches the ingest job's log. Runs whatever ingest's outcome, so a
