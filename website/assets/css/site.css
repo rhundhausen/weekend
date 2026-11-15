@@ -5,7 +5,7 @@
    Day is the default. A script in baseof.html sets data-period to "sunset" from an hour before
    the city's sunset to half an hour after, and "night" from then until half an hour before sunrise,
    so the periods follow the season (see baseof.html). The logo and the top stripe follow the period
-   in every color scheme (the logo's --logo is inlined in baseof.html); the page colors follow it
+   in every color scheme (the logo's --logo is added to this stylesheet by baseof.html); the page colors follow it
    only in light mode, so dark mode stays dark.
    The skyline along the header is in skyline.css, which a city replaces with its own.
    The page around the panels takes the period's sky (light blue, peach, deep indigo), and the

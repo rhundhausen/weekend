@@ -279,8 +279,7 @@ Setting up a new city: [github-setup.md](github-setup.md).
 ## Status
 
 Ingestion, the nightly workflows, the report emails, and the website are built and run for every
-city. The site still has the TESTING ONLY `?period=day|sunset|night` switch in
-`website/layouts/baseof.html`.
+city.
 
 ## Built with
 

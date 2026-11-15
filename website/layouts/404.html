@@ -1,0 +1,29 @@
+{{- /* The page for an address the site doesn't have, such as a mistyped category or a city that
+     has no page. Cloudflare serves it with status 404 (wrangler.jsonc: not_found_handling
+     "404-page"), and baseof.html marks it noindex. */}}
+{{ define "main" }}
+{{- $city := hugo.Data.city }}
+<header class="top">
+  <div class="wrap">
+    <div class="top-row">
+      <h1 class="brand"><a class="brand site-name" href="{{ relURL "/" }}"><span class="logo" aria-hidden="true"></span>{{ site.Title }}</a></h1>
+      <a class="top-chip" href="{{ relURL "about/" }}">About</a>
+    </div>
+    <p class="sub">Page not found.</p>
+  </div>
+</header>
+
+<main class="wrap">
+<div class="prose">
+  <h2>That page isn't here</h2>
+  <p>The address may be mistyped, or the page may have moved. <a href="{{ relURL "/" }}">See every upcoming event</a>, or pick a category or city below.</p>
+</div>
+</main>
+
+<footer class="wrap foot">
+  <p class="browse">Browse by category:
+    {{- range $i, $c := sort (partial "categories.html" .) "label" }}{{ if $i }},{{ end }} <a href="{{ relURL (printf "%s/" $c.id) }}">{{ $c.label }}</a>{{ end }}</p>
+  <p class="browse">Browse by city:
+    {{- range $i, $c := sort $city.cities }}{{ if $i }},{{ end }} <a href="{{ relURL (printf "%s/" (urlize $c)) }}">{{ $c }}</a>{{ end }}</p>
+</footer>
+{{ end }}

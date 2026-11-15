@@ -18,10 +18,13 @@ The script reads the time zone from `city.json`, copies `worker/` into the city'
 
 ## How it works
 
-- `layouts/home.html` reads `events.json` and the category and size lookups at build time, and writes a slimmer copy (short keys, only the fields the page shows) to `data/events.<hash>.json`.
-- `assets/js/app.js` loads that file and does the rest in the browser: search (all words must match, accents ignored), the date, city, size, and category filters, sorting, and paging. The filters are kept in the URL, so a filtered view can be shared or bookmarked.
+- `layouts/_partials/grid.html` (the home page, and each category's and city's page) reads `events.json` and the category and size lookups at build time, and writes a slimmer copy (short keys, only the fields the page shows) to `data/events.<hash>.json`.
+- The build also draws the page's first 25 rows, as app.js first shows them, and lists them as schema.org Events (`application/ld+json`), so search engines and readers that run no script see real events. app.js replaces the rows with the same rows when it loads.
+- `assets/js/app.js` loads that file and does the rest in the browser: search (all words must match, accents ignored), the date, city, size, and category filters, sorting, and paging. The filters are kept in the URL, so a filtered view can be shared or bookmarked: one chosen category is the path (`/music/`), one city with no single category is the path (`/meridian/`), and the rest are the query.
+- `assets/js/period.js` sets the day, sunset, or night look before the page draws, and `countup.js` sets up the header count. Neither is inline: no page has an inline script or style, so the Content-Security-Policy in `static/_headers` allows only the site's own files.
+- `layouts/404.html` is the page for an address the site doesn't have (Cloudflare serves it with status 404).
 - `assets/css/site.css` holds the styles. Colors are CSS variables with a dark set for `prefers-color-scheme: dark`. Below 760px wide, each row becomes a card.
-- No external scripts, fonts, or CDNs. Event text comes from outside sources, so the script only ever sets it with `textContent`.
+- No external scripts, fonts, or CDNs. Event text comes from outside sources, so the script only ever sets it with `textContent`, and the Content-Security-Policy is a second guard.
 
 ## Visitor log
 

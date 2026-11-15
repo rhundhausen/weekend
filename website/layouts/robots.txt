@@ -1,5 +1,6 @@
 {{- /* robots.txt for every city site (website/site.toml sets enableRobotsTXT). Everything may be
-     read; the sitemap lists the home page, each category's page, About, and Sources. The site's
+     read; the sitemap lists the home page, each category's and city's
+     page, About, and Sources. The site's
      own /api/ is for the page's visitor log, not for crawlers. Cloudflare may add its managed
      content signals above this. */ -}}
 User-agent: *

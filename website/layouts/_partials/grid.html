@@ -79,6 +79,31 @@
   ) }}
 {{- end }}
 {{- $data := resources.FromString "data/events.json" ($list | jsonify) | fingerprint }}
+{{- /* The first page as app.js first shows it, drawn by the build: the page's category or city,
+     Meetup and library events hidden, soonest first, 25 rows. Search engines and link readers
+     that run no script see real events, and visitors see rows before the script loads; app.js
+     replaces them with the same rows. Formats follow prepare() and renderRows() in app.js. */}}
+{{- $local := (time.AsTime "2000-01-01T00:00:00" $city.timeZone).Location }}
+{{- $phrases := hugo.Data.display.phrases | default slice }}
+{{- $stateRe := printf `^\D[^,]*,.*(\b\d{5}\b|,\s*(%s|%s)\b)` $city.state.code $city.state.name }}
+{{- /* events.json is in start order, so the first 60 that fit hold the first 25 and their ties.
+     They are then sorted as app.js sorts by date: the day in the city, the start instant (all-day
+     first), then the title. */}}
+{{- $first := slice }}
+{{- range hugo.Data.events }}
+  {{- if ge (len $first) 60 }}{{ break }}{{ end }}
+  {{- if and $category (ne .category $category) }}{{ continue }}{{ end }}
+  {{- if and $cityPage (ne .city $cityPage) }}{{ continue }}{{ end }}
+  {{- $isLibrary := findRE `(?i)librar` (.venue | default "") 1 }}
+  {{- range .sources }}{{ if findRE `(?i)librar` .name 1 }}{{ $isLibrary = true }}{{ end }}{{ end }}
+  {{- if or $isLibrary (findRE `^https?://([^/?#]+\.)?meetup\.com([/?#:]|$)` (.url | default "") 1) }}{{ continue }}{{ end }}
+  {{- $allDay := or .allDay (eq (len .start) 10) }}
+  {{- $day := cond $allDay (substr .start 0 10) (((time.AsTime .start).In $local).Format "2006-01-02") }}
+  {{- $instant := cond $allDay 0 (time.AsTime .start).Unix }}
+  {{- $first = $first | append (dict "key" (printf "%s|%012d|%s" $day $instant (lower .title)) "e" .) }}
+{{- end }}
+{{- $first = first 25 (apply (sort $first "key") "index" "." "e") }}
+
 {{- $sourceNames := dict }}
 {{- range hugo.Data.sources.sources }}{{ if .name }}{{ $sourceNames = merge $sourceNames (dict .name .displayName) }}{{ end }}{{ end }}
 {{- $cfg := dict "events" $data.RelPermalink "categories" $cats "sizes" $sizes "sizeOrder" $sizeOrder "lastIngest" $lastIngest "sources" $sourceNames "phrases" (hugo.Data.display.phrases | default slice) "tz" $city.timeZone "aliases" ($city.searchAliases | default dict) "state" (slice $city.state.code $city.state.name) "catPaths" $catPaths "cityPaths" $cityPaths "home" (relURL "/") "page" $category "cityPage" $cityPage }}
@@ -100,18 +125,10 @@
     <p class="sub">
       {{- /* The build's count, until app.js replaces it with what the unfiltered list shows. */}}
       <span id="total">{{ len hugo.Data.events | lang.FormatNumber 0 }}</span>
-      {{- /* On every load, the count runs up from 0 (app.js animates it). This runs before the
-           page draws, so the real number never flashes first. Its width is held at the full
-           number's, so the rest of the line stays put. Skipped for reduced motion. */}}
-      <script>
-        (function () {
-          var t = document.getElementById('total');
-          if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-          t.style.minWidth = t.getBoundingClientRect().width + 'px';
-          t.dataset.countUp = t.textContent;
-          t.textContent = '0';
-        })();
-      </script>
+      {{- /* On every load, the count runs up from 0 (assets/js/countup.js sets it up before the
+           page draws, and app.js animates it). */}}
+      {{ $countUp := resources.Get "js/countup.js" | minify | fingerprint }}
+      <script src="{{ $countUp.RelPermalink }}" integrity="{{ $countUp.Data.Integrity }}"></script>
       upcoming events
       <span class="sep" aria-hidden="true">|</span> <a href="{{ relURL "sources/" }}">{{ len $running }} sources</a>
       {{- /* In the city's time, as app.js writes it, so the text does not change after the page draws. */}}
@@ -240,7 +257,42 @@
           <th scope="col" class="c-cost"{{ with $costLegend }} title="{{ . }}"{{ end }}>Cost</th>
         </tr>
       </thead>
-      <tbody id="rows"></tbody>
+      <tbody id="rows">
+        {{- range $first }}
+        {{- $allDay := or .allDay (eq (len .start) 10) }}
+        {{- $sd := cond $allDay (substr .start 0 10) (((time.AsTime .start).In $local).Format "2006-01-02") }}
+        {{- $ed := $sd }}
+        {{- with .end }}{{ $ed = cond $allDay (substr . 0 10) (((time.AsTime .).In $local).Format "2006-01-02") }}{{ end }}
+        {{- if lt $ed $sd }}{{ $ed = $sd }}{{ end }}
+        {{- $dateText := (time.AsTime $sd).Format "Mon, Jan 2" }}
+        {{- if ne $sd $ed }}{{ $dateText = printf "%s to %s" $dateText ((time.AsTime $ed).Format "Jan 2") }}{{ end }}
+        {{- $title := .title }}
+        {{- $venue := .venue | default "" }}
+        {{- if findRE $stateRe $venue 1 }}{{ $venue = index (split $venue ",") 0 }}{{ end }}
+        {{- range $phrases }}
+          {{- $re := printf `(?i)\b%s(\W|$)` (replaceRE `([.*+?^${}()|\[\]\\])` `\$1` (index . 0)) }}
+          {{- $title = replaceRE $re (printf "%s$1" (index . 1)) $title }}
+          {{- $venue = replaceRE $re (printf "%s$1" (index . 1)) $venue }}
+        {{- end }}
+        {{- $tier := index (dict "free" "Free" "$" "$" "$$" "$$" "$$$" "$$$") (.costTier | default "") }}
+        <tr>
+          <td class="c-date" data-label="Date">{{ $dateText }}</td>
+          <td class="c-time" data-label="Time">{{ if $allDay }}All day{{ else }}{{ ((time.AsTime .start).In $local).Format "3:04 PM" }}{{ end }}</td>
+          {{- if .linkBroken }}
+          <td class="c-title no-link" title="Information not available">{{ $title }}</td>
+          {{- else if findRE `(?i)^https?://` (.url | default "") 1 }}
+          <td class="c-title" title="{{ .title }}{{ with .description }}&#10;&#10;{{ . }}{{ end }}"><a href="{{ .url }}" target="_blank" rel="noopener">{{ $title }}</a></td>
+          {{- else }}
+          <td class="c-title">{{ $title }}</td>
+          {{- end }}
+          <td class="c-venue"{{ with .venue }} title="{{ . }}"{{ end }} data-label="Venue">{{ with .city }}{{ if ne . "Other" }}<span class="v-city">{{ . }}</span><span class="v-sep"> | </span>{{ end }}{{ end }}{{ $venue }}</td>
+          <td class="c-city" data-label="City">{{ .city }}</td>
+          <td class="c-cat"><span class="pill cat-{{ .category }}">{{ index $cats .category | default .category }}</span></td>
+          <td class="c-size">{{ with .size }}<span class="size" title="{{ index $sizes . | default . }}">{{ . }}</span>{{ end }}{{ with $tier }}<span class="cost m-only">{{ . }}</span>{{ end }}</td>
+          <td class="c-cost">{{ with $tier }}<span class="cost">{{ . }}</span>{{ end }}</td>
+        </tr>
+        {{- end }}
+      </tbody>
     </table>
   </div>
 
@@ -261,6 +313,21 @@
   <p>Every listing links to the organizer's own page. Collected nightly from public calendars and APIs by <a href="https://github.com/{{ $city.repo }}">{{ $city.siteName }}</a>. We welcome feedback. Spot a mistake, miss an event, or have an idea? <a href="{{ print "https://github.com/" $city.repo "/issues/new?" $feedback }}" rel="noopener" target="_blank">Create a GitHub issue</a>.</p>
 </footer>
 
+{{- /* The same first rows as schema.org Events, which search engines read for event listings. Only
+     what the rows show: title, times, venue, city, and the organizer's link. */}}
+{{- $ld := slice }}
+{{- range $first }}
+  {{- $address := dict "@type" "PostalAddress" "addressRegion" $city.state.code }}
+  {{- with .city }}{{ if ne . "Other" }}{{ $address = merge $address (dict "addressLocality" .) }}{{ end }}{{ end }}
+  {{- $place := dict "@type" "Place" "name" (.venue | default .city) "address" $address }}
+  {{- $event := dict "@type" "Event" "name" .title "startDate" .start "eventAttendanceMode" "https://schema.org/OfflineEventAttendanceMode" "eventStatus" "https://schema.org/EventScheduled" "location" $place }}
+  {{- with .end }}{{ $event = merge $event (dict "endDate" .) }}{{ end }}
+  {{- if and .url (not .linkBroken) }}{{ $event = merge $event (dict "url" .url) }}{{ end }}
+  {{- $ld = $ld | append $event }}
+{{- end }}
+{{- with $ld }}
+<script type="application/ld+json">{{ dict "@context" "https://schema.org" "@graph" . | jsonify | safeJS }}</script>
+{{- end }}
 <script type="application/json" id="wk-config">{{ $cfg | jsonify | safeJS }}</script>
 {{ $js := resources.Get "js/app.js" | js.Build (dict "minify" true "target" "es2020") | fingerprint }}
 <script src="{{ $js.RelPermalink }}" integrity="{{ $js.Data.Integrity }}" defer></script>
