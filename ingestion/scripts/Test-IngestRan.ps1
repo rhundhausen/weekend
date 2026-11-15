@@ -6,7 +6,7 @@
   Refine starts on workflow_run each time an ingest run completes. Ingest schedules two cron lines
   for daylight saving and skips the one that isn't midnight in the city, and that run still completes,
   so refine looks at the ingest run's jobs: it runs if the job named ingest started (named
-  "<caller job> / ingest" when a city's workflow calls the engine's reusable one), whatever its
+  "<caller job> / ingest" when a city's workflow calls the core's reusable one), whatever its
   outcome (success, failure, cancelled, timed out), and skips it if that job was skipped or never
   reached. A failed ingest still gets a refine, so past events move to the archive and links are
   checked against the last good raw file. A manual run (any event other than workflow_run) always

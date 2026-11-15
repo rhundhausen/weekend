@@ -1,4 +1,4 @@
-# The city this run is for. Every city fact the engine uses comes from the city repo's city.json
+# The city this run is for. Every city fact the core uses comes from the city repo's city.json
 # (schema: ingestion/schema/city.schema.json), and every city file is found from the city root.
 
 function Get-WkCityRoot {
@@ -74,8 +74,8 @@ function Get-WkCityPath {
   $path
 }
 
-function Get-WkEnginePath {
-  # A path inside this engine's ingestion folder, such as Get-WkEnginePath schema event.schema.json.
+function Get-WkCorePath {
+  # A path inside this core's ingestion folder, such as Get-WkCorePath schema event.schema.json.
   [CmdletBinding()]
   [OutputType([string])]
   param([Parameter(Mandatory, ValueFromRemainingArguments)][string[]]$Parts)
@@ -106,7 +106,7 @@ function Read-WkCityFile {
   param([Parameter(Mandatory, Position = 0)][string]$Path)
 
   $text = Get-Content -LiteralPath $Path -Raw
-  $schema = Get-Content -LiteralPath (Get-WkEnginePath 'schema' 'city.schema.json') -Raw
+  $schema = Get-Content -LiteralPath (Get-WkCorePath 'schema' 'city.schema.json') -Raw
   $errors = $null
   if (-not ($text | Test-Json -Schema $schema -ErrorVariable errors -ErrorAction SilentlyContinue)) {
     throw "$Path does not match ingestion/schema/city.schema.json: $(@($errors | ForEach-Object { $_.ToString() }) -join '; ')"
@@ -143,26 +143,26 @@ function Get-WkStatePattern {
 function Get-WkVocabulary {
   <#
   .SYNOPSIS
-    One of the engine's vocabulary tables (ingestion/vocabulary), with the city's additions from
+    One of the core's vocabulary tables (ingestion/vocabulary), with the city's additions from
     data/schema/<Name>.json in the city repo when that file exists.
   .DESCRIPTION
-    - tags: the city's keywords for a tag id are added to the engine's; a city tag with a new id
+    - tags: the city's keywords for a tag id are added to the core's; a city tag with a new id
       is added whole.
-    - categories: the city's includes for a category id replace the engine's.
+    - categories: the city's includes for a category id replace the core's.
     - title-case: the city's keepUpper and smallWords are added, and its forms override.
   #>
   [CmdletBinding()]
   param([Parameter(Mandatory, Position = 0)][ValidateSet('tags', 'categories', 'title-case')][string]$Name)
 
-  $engine = Get-Content -LiteralPath (Get-WkEnginePath 'vocabulary' "$Name.json") -Raw | ConvertFrom-Json -AsHashtable
+  $core = Get-Content -LiteralPath (Get-WkCorePath 'vocabulary' "$Name.json") -Raw | ConvertFrom-Json -AsHashtable
   $cityPath = Get-WkCityPath 'data' 'schema' "$Name.json"
-  if (-not (Test-Path -LiteralPath $cityPath)) { return $engine }
+  if (-not (Test-Path -LiteralPath $cityPath)) { return $core }
   $local = Get-Content -LiteralPath $cityPath -Raw | ConvertFrom-Json -AsHashtable
 
   switch ($Name) {
     'tags' {
       $byId = [ordered]@{}
-      foreach ($tag in $engine) { $byId[$tag.id] = $tag }
+      foreach ($tag in $core) { $byId[$tag.id] = $tag }
       foreach ($tag in @($local | Where-Object { $_ -is [Collections.IDictionary] -and $_.id })) {
         if ($byId.Contains($tag.id)) {
           $have = @($byId[$tag.id].keywords)
@@ -176,16 +176,16 @@ function Get-WkVocabulary {
     'categories' {
       $includes = @{}
       foreach ($category in @($local | Where-Object { $_ -is [Collections.IDictionary] -and $_.id })) { $includes[$category.id] = $category.includes }
-      foreach ($category in $engine) {
+      foreach ($category in $core) {
         if ($includes.ContainsKey($category.id)) { $category.includes = $includes[$category.id] }
       }
-      return $engine
+      return $core
     }
     'title-case' {
-      $engine.keepUpper = @(@($engine.keepUpper) + @($local.keepUpper) | Where-Object { $_ } | Select-Object -Unique)
-      $engine.smallWords = @(@($engine.smallWords) + @($local.smallWords) | Where-Object { $_ } | Select-Object -Unique)
-      if ($local.forms) { foreach ($key in $local.forms.Keys) { $engine.forms[$key] = $local.forms[$key] } }
-      return $engine
+      $core.keepUpper = @(@($core.keepUpper) + @($local.keepUpper) | Where-Object { $_ } | Select-Object -Unique)
+      $core.smallWords = @(@($core.smallWords) + @($local.smallWords) | Where-Object { $_ } | Select-Object -Unique)
+      if ($local.forms) { foreach ($key in $local.forms.Keys) { $core.forms[$key] = $local.forms[$key] } }
+      return $core
     }
   }
 }
@@ -193,16 +193,16 @@ function Get-WkVocabulary {
 function Get-WkSchemaText {
   <#
   .SYNOPSIS
-    An engine JSON schema (event or sources) as text, with the city's city names in its city enum.
+    A core JSON schema (event or sources) as text, with the city's city names in its city enum.
   .DESCRIPTION
-    The engine's schemas list only "Other" as a city; each city's own list comes from city.json.
+    The core's schemas list only "Other" as a city; each city's own list comes from city.json.
   #>
   [CmdletBinding()]
   [OutputType([string])]
   param([Parameter(Mandatory, Position = 0)][ValidateSet('event', 'sources')][string]$Name)
 
   Get-WkCityCached "schema-$Name" {
-    $schema = Get-Content -LiteralPath (Get-WkEnginePath 'schema' "$Name.schema.json") -Raw | ConvertFrom-Json -AsHashtable
+    $schema = Get-Content -LiteralPath (Get-WkCorePath 'schema' "$Name.schema.json") -Raw | ConvertFrom-Json -AsHashtable
     $cities = @(@((Get-WkCity).cities) + 'Other')
     switch ($Name) {
       'event' { $schema.properties.city.enum = $cities }

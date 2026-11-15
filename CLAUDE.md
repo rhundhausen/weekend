@@ -1,4 +1,4 @@
-# Weekend engine: ground rules
+# Weekend core: ground rules
 
 - PowerShell 7, 2-space indents, LF line endings in JSON output.
 - Secrets come from environment variables only. Never read them from files

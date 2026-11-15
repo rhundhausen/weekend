@@ -1,10 +1,10 @@
 # Development
 
-This page is for working on the engine or on a city that uses it. If you run a site and found
+This page is for working on the core or on a city that uses it. If you run a site and found
 this through a Weekend bot's User-Agent, see that city repo's README instead (the User-Agent
 links to it).
 
-## Engine and city repos
+## Core and city repos
 
 This repo holds all shared code: the adapters (including ones written for a single platform), the
 ingest and refine scripts, the schemas and vocabulary, the tests, the Hugo theme, and the reusable
@@ -15,7 +15,7 @@ city.json                    the city's facts (format: ingestion/schema/city.sch
 ingestion/sources.json       the city's sources (format: sources.md)
 data/                        events, archive, links, meta, written by the workflows
 data/schema/                 the city's lookup tables: venue-aliases, place-cities, sizes, and
-                             any additions to the engine's categories, tags, or title case
+                             any additions to the core's categories, tags, or title case
 website/wrangler.jsonc       Cloudflare Worker name, D1 binding, build command
 website/static/              favicons and web manifest
 website/data/display.json    display names
@@ -24,12 +24,12 @@ website/assets/css/skyline.css   optional: the city's skyline
 README.md                    the page the bot's User-Agent points site owners to
 ```
 
-A city never copies an engine file to change it. What a city varies is a field in `city.json`, an
+A city never copies a core file to change it. What a city varies is a field in `city.json`, an
 entry in its `sources.json` or `data/schema/`, or a website file at the same path as the theme's.
-Cities track this repo's `main`, with no version pinning: an engine push reaches a city at its
+Cities track this repo's `main`, with no version pinning: a core push reaches a city at its
 next workflow run or site build.
 
-Values the engine derives from `city.json` (`lib/City.ps1`): the User-Agent
+Values the core derives from `city.json` (`lib/City.ps1`): the User-Agent
 `<siteName>/1.0 (+https://github.com/<repo>)`, the robots.txt token (the site name), the data
 commit identity "`<siteName>` bot", and the report sender `<siteName> Reports <reports@<domain>>`.
 
@@ -69,7 +69,7 @@ fields: [schema.md](schema.md).
 
 ## Running locally
 
-Requires PowerShell 7.4 or later and Pester 6.0.0. The engine's tests run from this repo and need
+Requires PowerShell 7.4 or later and Pester 6.0.0. The core's tests run from this repo and need
 no city repo (they use the fixture city in `ingestion/tests/fixtures/city`):
 
 ```powershell
@@ -95,7 +95,7 @@ or above the current directory that holds a `city.json`.
 To build or preview the site, see [website/README.md](../website/README.md).
 
 API keys come from environment variables only: set them in the shell before running ingest. The
-engine's `ingestion/.env.example.ps1` lists them; a copy at the city repo's `ingestion/.env.ps1`
+core's `ingestion/.env.example.ps1` lists them; a copy at the city repo's `ingestion/.env.ps1`
 (gitignored, never committed) can be dot-sourced to set them. Sources
 whose key is missing fail with a warning and the rest still run. Only ingest needs source keys;
 refine uses none, and both use the Resend key only to email their report. Raw per-source output
@@ -163,14 +163,14 @@ so nobody clicks through to a page that's gone.
 ## Nightly workflows
 
 The work is in this repo's reusable workflows, `.github/workflows/ingest.yml` and `refine.yml`
-(`on: workflow_call`). Each checks out the calling city repo and this repo (into `.engine/`). A
+(`on: workflow_call`). Each checks out the calling city repo and this repo (into `.core/`). A
 city's own `ingest.yml` holds only the cron lines and passes its secrets with `secrets: inherit`;
 its `refine.yml` holds only the triggers; its `test.yml` calls `city-test.yml`, which validates the
-city's files against the engine's schemas and builds the site. This repo's own `test.yml` runs the
+city's files against the core's schemas and builds the site. This repo's own `test.yml` runs the
 Pester tests and the Worker's tests on every push and pull request.
 
 - **When:** a city's ingest runs at midnight in its time zone. Cron is UTC and daylight saving
-  moves the offset, so the caller schedules both candidate UTC hours and the engine's first job,
+  moves the offset, so the caller schedules both candidate UTC hours and the core's first job,
   `Test-LocalHour.ps1`, skips the one that isn't midnight in the city that day. Refine has no
   cron: it starts with `workflow_run` each time an ingest run on `main` completes, scheduled or
   manual, **whether ingest succeeded or failed**, so past events still move to the archive and
@@ -203,7 +203,7 @@ Pester tests and the Worker's tests on every push and pull request.
 - **Deploying:** Cloudflare Workers Builds is connected to each city repo, with `website/` as its
   root. The city's `wrangler.jsonc` build command clones this repo's `main` and runs
   `website/build.sh`, and the build output in `website/public` is deployed. Every push to the city's
-  `main` deploys, including refine's data commit; an engine push reaches the site at the city's
+  `main` deploys, including refine's data commit; a core push reaches the site at the city's
   next build. Cloudflare skips any commit whose message contains `[skip ci]`, so leave it out of
   commits that should reach the site.
 - **Local sources:** some sites turn away or time out on GitHub's servers (which run in Azure) but

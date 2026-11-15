@@ -1,4 +1,4 @@
-/* The skyline along the bottom of the header, one per look (see site.css). This is the engine's
+/* The skyline along the bottom of the header, one per look (see site.css). This is the core's
    default, a row of plain city blocks. A city replaces it with its own assets/css/skyline.css,
    keeping these three rules and changing only the images. The night skyline has lit windows. */
 :root {

@@ -9,6 +9,6 @@ website/.wrangler/
 .secrets.local.md
 .superpowers/
 
-# City files belong in the city repos, never in the engine.
+# City files belong in the city repos, never in the core.
 /data/
 /ingestion/sources.json

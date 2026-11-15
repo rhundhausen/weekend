@@ -13,7 +13,7 @@ bash ../../weekend/website/build.sh           # builds to website/public/ (gitig
 ```
 
 Cloudflare runs the city's `wrangler.jsonc` build command, which clones this repo and runs the same script:
-`git clone --depth 1 https://github.com/rhundhausen/weekend ../.engine && bash ../.engine/website/build.sh`.
+`git clone --depth 1 https://github.com/rhundhausen/weekend ../.core && bash ../.core/website/build.sh`.
 The script reads the time zone from `city.json`, copies `worker/` into the city's `website/worker/` (wrangler's `main`; build output, not committed), and runs Hugo with this repo as the theme. To preview while editing, run Hugo the same way from the city's `website/` folder: `hugo server --config ../../weekend/website/site.toml --themesDir ../.. --theme weekend` (with `HUGO_TITLE` set to the site name for the right title).
 
 ## How it works

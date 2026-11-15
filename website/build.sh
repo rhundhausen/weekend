@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# Builds a city's site with this engine repo as its Hugo theme (see hugo.toml at the repo root).
+# Builds a city's site with this core repo as its Hugo theme (see hugo.toml at the repo root).
 #
 # Run it from the city repo's website/ folder (the Cloudflare project root). The city's
-# wrangler.jsonc build command fetches the engine and runs this script:
-#   git clone --depth 1 https://github.com/rhundhausen/weekend ../.engine && bash ../.engine/website/build.sh
-# Locally, with the engine checked out next to the city repo:
+# wrangler.jsonc build command fetches the core and runs this script:
+#   git clone --depth 1 https://github.com/rhundhausen/weekend ../.core && bash ../.core/website/build.sh
+# Locally, with the core checked out next to the city repo:
 #   bash ../../weekend/website/build.sh
 #
 # It reads the city's time zone from ../city.json, installs Hugo when the pinned version is not
-# already on the PATH, copies the engine's Worker into worker/ (wrangler.jsonc's main; the copy is
+# already on the PATH, copies the core's Worker into worker/ (wrangler.jsonc's main; the copy is
 # build output, not committed), and builds into public/.
 
 set -euo pipefail
 
 HUGO_VERSION=0.162.1
-ENGINE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CITY_JSON="../city.json"
 
 if [ ! -f "$CITY_JSON" ]; then
@@ -42,23 +42,23 @@ hugo version
 
 # The commits being built, for the build log. Cloudflare's build sets WORKERS_CI_COMMIT_SHA if the
 # city checkout has no history.
-ENGINE_COMMIT="$(git -C "$ENGINE" rev-parse --short=7 HEAD 2>/dev/null || true)"
+CORE_COMMIT="$(git -C "$CORE" rev-parse --short=7 HEAD 2>/dev/null || true)"
 SITE_COMMIT="$(git -C .. rev-parse --short=7 HEAD 2>/dev/null || true)"
 if [ -z "$SITE_COMMIT" ] && [ -n "${WORKERS_CI_COMMIT_SHA:-}" ]; then SITE_COMMIT="${WORKERS_CI_COMMIT_SHA:0:7}"; fi
-echo "Engine: ${ENGINE} (${ENGINE_COMMIT:-not a git checkout}), site: ${SITE_COMMIT:-unknown}"
+echo "Core: ${CORE} (${CORE_COMMIT:-not a git checkout}), site: ${SITE_COMMIT:-unknown}"
 
-# The version on the About page: the engine commit's time in UTC, such as 2026.11.15.0042, so every
-# city built from the same engine shows the same version, and it changes only when the engine does.
+# The version on the About page: the core commit's time in UTC, such as 2026.11.15.0042, so every
+# city built from the same core shows the same version, and it changes only when the core does.
 # Outside a git checkout, the build time in UTC.
-VERSION="$(TZ=UTC git -C "$ENGINE" log -1 --date=format-local:%Y.%m.%d.%H%M --format=%cd 2>/dev/null || true)"
+VERSION="$(TZ=UTC git -C "$CORE" log -1 --date=format-local:%Y.%m.%d.%H%M --format=%cd 2>/dev/null || true)"
 [ -n "$VERSION" ] || VERSION="$(TZ=UTC date +%Y.%m.%d.%H%M)"
 export HUGO_PARAMS_VERSION="$VERSION"
 echo "Version: ${VERSION}"
 
 rm -rf worker
-cp -R "$ENGINE/website/worker" worker
+cp -R "$CORE/website/worker" worker
 rm -rf worker/test worker/node_modules
 
 # site.toml mounts the city's ../data, ../ingestion/sources.json, and ../city.json, so the full
 # city repo is needed; Cloudflare clones it and runs this from website/.
-hugo build --gc --minify --config "$ENGINE/website/site.toml" --baseURL "https://${DOMAIN}/" --themesDir "$(dirname "$ENGINE")" --theme "$(basename "$ENGINE")"
+hugo build --gc --minify --config "$CORE/website/site.toml" --baseURL "https://${DOMAIN}/" --themesDir "$(dirname "$CORE")" --theme "$(basename "$CORE")"

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/rhundhausen/weekend/blob/main/ingestion/schema/city.schema.json",
   "title": "Weekend city",
-  "description": "A city repo's city.json: every city fact the engine's scripts and website use.",
+  "description": "A city repo's city.json: every city fact the core's scripts and website use.",
   "type": "object",
   "required": ["siteName", "domain", "repo", "cityName", "timeZone", "state", "cities", "coordinates", "description", "logDatabase", "about"],
   "additionalProperties": false,
@@ -29,7 +29,7 @@
     },
     "cities": {
       "type": "array",
-      "description": "The cities an event can be in, in schema order. Other is added by the engine.",
+      "description": "The cities an event can be in, in schema order. Other is added by the core.",
       "items": { "type": "string", "minLength": 1, "not": { "const": "Other" } },
       "minItems": 1,
       "uniqueItems": true

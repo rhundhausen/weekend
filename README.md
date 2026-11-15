@@ -1,10 +1,10 @@
 # weekend
 
-The shared engine and code behind the Weekend city event sites. It reads public event calendars, feeds,
+The shared core behind the Weekend city event sites. It reads public event calendars, feeds,
 and APIs, normalizes events to one schema, merges duplicates, checks links, and builds a static
 Hugo site from the result.
 
-## Engine and city repos
+## Core and city repos
 
 This repo holds only code every city shares:
 
@@ -15,12 +15,12 @@ This repo holds only code every city shares:
 - `ingestion/vocabulary`: categories, tags, and title case, which a city adds to.
 - `website`: the Hugo theme (layouts, assets, and the Cloudflare Worker) and its build script.
   The theme config is `hugo.toml` at the repo root.
-- `.github/workflows`: the engine's own tests (`test.yml`) and the reusable workflows every city
+- `.github/workflows`: the core's own tests (`test.yml`) and the reusable workflows every city
   calls: `ingest.yml`, `refine.yml`, and `city-test.yml`.
 
 Each city has its own repo (such as weekendboise) holding everything specific to that city:
 `city.json`, `ingestion/sources.json`, `data/`, `website/wrangler.jsonc`, favicons and
-branding (`website/static/`, `website/data/display.json`, optionally `website/assets/css/skyline.css`), thin workflows that call the engine's, and a README for site owners.
+branding (`website/static/`, `website/data/display.json`, optionally `website/assets/css/skyline.css`), thin workflows that call the core's, and a README for site owners.
 City facts never live here; adapters written for one platform may (`CLAUDE.md`).
 
 ## Docs
@@ -32,7 +32,7 @@ City facts never live here; adapters written for one platform may (`CLAUDE.md`).
 - `docs/schema.md` and `docs/cost-tiers.md`: the event fields and how they are worked out.
 - `website/README.md`: the theme, building the site, and the visitor log.
 
-Cities track this repo's `main`: an engine push reaches a city at its next build or workflow run.
+Cities track this repo's `main`: a core push reaches a city at its next build or workflow run.
 
 ## Tests
 
@@ -48,6 +48,6 @@ Every test file loads `ingestion/tests/TestCity.ps1` first, which points `WEEKEN
 
 Every script takes `-CityRoot`. Without it, the city is `$env:WEEKEND_CITY_ROOT`, or else the
 nearest folder at or above the current directory that holds a `city.json`. City facts come from
-`city.json` (format: `ingestion/schema/city.schema.json`); the engine's vocabulary
+`city.json` (format: `ingestion/schema/city.schema.json`); the core's vocabulary
 (`ingestion/vocabulary`: categories, tags, title case) is merged with any additions in the city's
 `data/schema/` files of the same names.

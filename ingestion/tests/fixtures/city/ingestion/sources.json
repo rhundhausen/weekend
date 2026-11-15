@@ -1,5 +1,5 @@
 {
-  "_comment": "Test fixture: the WeekendBoise entries the engine tests read, copied from weekendboise/ingestion/sources.json.",
+  "_comment": "Test fixture: the WeekendBoise entries the core tests read, copied from weekendboise/ingestion/sources.json.",
   "sources": [
     {
       "name": "city-of-star",

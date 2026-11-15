@@ -4,7 +4,7 @@ BeforeAll {
 
   $root = Join-Path $PSScriptRoot '..' '..'
   $repoRoot = Join-Path $PSScriptRoot '..' '..' '..'
-  # The engine's vocabulary with the fixture city's additions, as the scripts see it.
+  # The core's vocabulary with the fixture city's additions, as the scripts see it.
   $script:categories = @(Get-WkVocabulary categories | ForEach-Object { [pscustomobject]$_ })
   $script:tags = @(Get-WkVocabulary tags | ForEach-Object { [pscustomobject]$_ })
   $script:eventSchema = Get-Content (Join-Path $root 'schema/event.schema.json') -Raw | ConvertFrom-Json

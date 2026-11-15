@@ -1,13 +1,13 @@
 # Setting up a city
 
-The steps to start a new city site on the engine. Do them in order. How the parts work once they
+The steps to start a new city site on the core. Do them in order. How the parts work once they
 run: [development.md](development.md).
 
 ## 1. The repository
 
 Create a public repo for the city (such as `rhundhausen/weekend<city>`), with `main` as its default
 branch: the nightly schedule only runs on the default branch. Add the city's own files
-(development.md, "Engine and city repos"):
+(development.md, "Core and city repos"):
 
 - `city.json`, checked by `ingestion/schema/city.schema.json`. `siteName`, `domain`, and `repo`
   set the bot's User-Agent, the data commit identity, and the report sender.
@@ -21,9 +21,9 @@ branch: the nightly schedule only runs on the default branch. Add the city's own
 - `README.md` for site owners: who the bot is, how it behaves, and how to opt out. The User-Agent
   links to it.
 - `.gitignore`, `.gitattributes`, and `LICENSE`, copied from an existing city. The `.gitignore`
-  keeps out the engine checkout (`.engine/`), `out/`, and the build output in `website/`.
+  keeps out the core checkout (`.core/`), `out/`, and the build output in `website/`.
 
-Validate locally with the engine checked out beside the repo:
+Validate locally with the core checked out beside the repo:
 `../weekend/ingestion/scripts/Test-Sources.ps1`, then build the site
 ([website/README.md](../website/README.md)).
 
@@ -54,7 +54,7 @@ scoped to it with sending access. The sender, `<siteName> Reports <reports@<doma
 ## 4. Cloudflare
 
 1. Workers & Pages > Create > Import a repository: the city repo, with `website` as the root
-   directory. The build command comes from `wrangler.jsonc`, which clones the engine and runs its
+   directory. The build command comes from `wrangler.jsonc`, which clones the core and runs its
    `build.sh`.
 2. For the visitor log, create the D1 database named in `city.json`'s `logDatabase`
    (`npx wrangler d1 create <logDatabase>` or the dashboard) and put its id in `wrangler.jsonc`

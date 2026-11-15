@@ -9,7 +9,7 @@ disableKinds = ['taxonomy', 'term', 'rss']
 enableRobotsTXT = true
 
 [module]
-  # The city's own files, at the same paths as the engine's, replace them: static/ holds the city's
+  # The city's own files, at the same paths as the core's, replace them: static/ holds the city's
   # icons and web manifest, data/display.json its display names, and assets/css/skyline.css (when
   # present) its skyline.
   [[module.mounts]]

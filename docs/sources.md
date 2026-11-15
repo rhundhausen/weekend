@@ -2,7 +2,7 @@
 
 This is the reference for every city's `ingestion/sources.json`: the fields, the adapters, and the status of ideas. Examples name WeekendBoise sources.
 
-A city repo's `ingestion/sources.json` lists every source: the ones ingest runs, configured ones waiting on credentials, ideas, and sites already ruled out. Ingest runs only entries whose `status` is `running`. It is hand-edited: keep entries sorted by `displayName`, ignoring case. Run the engine's `ingestion/scripts/Test-Sources.ps1` from the city repo after editing (`../weekend/ingestion/scripts/Test-Sources.ps1` with the engine checked out next to it).
+A city repo's `ingestion/sources.json` lists every source: the ones ingest runs, configured ones waiting on credentials, ideas, and sites already ruled out. Ingest runs only entries whose `status` is `running`. It is hand-edited: keep entries sorted by `displayName`, ignoring case. Run the core's `ingestion/scripts/Test-Sources.ps1` from the city repo after editing (`../weekend/ingestion/scripts/Test-Sources.ps1` with the core checked out next to it).
 
 **Check it before probing any site.** See [Status lifecycle](#status-lifecycle) below.
 

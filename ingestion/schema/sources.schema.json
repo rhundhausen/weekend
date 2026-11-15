@@ -166,7 +166,7 @@
         },
         "city": {
           "type": "string",
-          "description": "Fallback for events that do not report a city. The enum lists only Other here; the engine adds the city's cities from city.json when it validates.",
+          "description": "Fallback for events that do not report a city. The enum lists only Other here; the core adds the city's cities from city.json when it validates.",
           "enum": ["Other"]
         },
         "venue": {

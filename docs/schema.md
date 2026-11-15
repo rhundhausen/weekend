@@ -51,7 +51,7 @@ When duplicates merge, the best source keeps its own `costTier`, and a duplicate
 
 Every event has one primary category and any number of tags. Tags cross categories: a free family Christmas concert is `holiday-seasonal`, tagged `concert`, `free-admission`, and `family-friendly`.
 
-The engine's vocabulary in `ingestion/vocabulary/` holds the categories and tags every city shares, and a city adds to them in its own `data/schema/` files of the same names. `categories.json` holds the 12 categories. Their ids are also enums in both schemas, and a test keeps all three in step.
+The core's vocabulary in `ingestion/vocabulary/` holds the categories and tags every city shares, and a city adds to them in its own `data/schema/` files of the same names. `categories.json` holds the 12 categories. Their ids are also enums in both schemas, and a test keeps all three in step.
 
 `tags.json` holds the tags:
 
@@ -74,7 +74,7 @@ Matching is by keyword, so some events are misfiled. An event whose title is onl
 
 ## Titles
 
-A title or venue in all capitals ("OLD BOISE MODEL RAILROAD") or all lowercase ("idaho art gallery") is changed to title case ("Old Boise Model Railroad", "Idaho Art Gallery"). Acronyms stay capitalized: words with no vowels (DJ, CSL), Roman numerals, and the words listed in `title-case.json` (the engine's vocabulary plus the city's additions), which also gives exact spellings (McCall) and the small words kept lowercase (of, the, in). All-lowercase text skips that list, since "us", "id", and "steam" are ordinary words in lowercase. A title with both cases, or of one word (often a band's own styling, such as KREAM), is left alone. The `id` is computed from the lowercased title, so it does not change. The code is `ConvertTo-WkTitleCase` in `ingestion/scripts/lib/Schema.ps1`.
+A title or venue in all capitals ("OLD BOISE MODEL RAILROAD") or all lowercase ("idaho art gallery") is changed to title case ("Old Boise Model Railroad", "Idaho Art Gallery"). Acronyms stay capitalized: words with no vowels (DJ, CSL), Roman numerals, and the words listed in `title-case.json` (the core's vocabulary plus the city's additions), which also gives exact spellings (McCall) and the small words kept lowercase (of, the, in). All-lowercase text skips that list, since "us", "id", and "steam" are ordinary words in lowercase. A title with both cases, or of one word (often a band's own styling, such as KREAM), is left alone. The `id` is computed from the lowercased title, so it does not change. The code is `ConvertTo-WkTitleCase` in `ingestion/scripts/lib/Schema.ps1`.
 
 ## Venues
 

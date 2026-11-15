@@ -6,7 +6,7 @@
   Checks data/events.json and data/archive/*.json against the event schema.
   Then checks that every category, tag, and source referenced by an event exists. Sources are
   validated by Test-Sources.ps1. Exits non-zero on any failure.
-  Categories and tags are the engine's vocabulary with the city's additions.
+  Categories and tags are the core's vocabulary with the city's additions.
 .PARAMETER CityRoot
   The city repo (holds city.json, ingestion/sources.json, and data/). Defaults to
   $env:WEEKEND_CITY_ROOT, else the nearest folder at or above the current directory with a city.json.
