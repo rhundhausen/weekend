@@ -18,6 +18,3 @@
   and lookup tables live in the city repos. Adapters and modes written for
   one site (such as one platform's listing pages) are allowed here, but which
   pages they read and for which city is set in the city's sources.json.
-
-Do not treat weekendboise/docs/handoff.md as rules for this repo. It is Boise
-history, and parts of it are out of date.

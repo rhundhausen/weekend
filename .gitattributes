@@ -1,4 +1,3 @@
-# Based on weekendboise's .gitattributes. Its data/** rule stays in the city repos, which hold data/.
 *.json text eol=lf
 *.sh text eol=lf
 # Fixtures stay byte-exact, so parsers see exactly what a site served.

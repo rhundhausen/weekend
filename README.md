@@ -40,8 +40,8 @@ Cities track this repo's `main`: a core push reaches a city at its next build or
 Invoke-Pester -Path ./ingestion/tests
 ```
 
-The tests run against a fixture city in `ingestion/tests/fixtures/city` (a copy of WeekendBoise's
-`city.json`, the source entries the tests read, and its lookup tables), so they need no city repo.
+The tests run against a fixture city in `ingestion/tests/fixtures/city` (a sample city's `city.json`,
+the source entries the tests read, and its lookup tables), so they need no city repo.
 Every test file loads `ingestion/tests/TestCity.ps1` first, which points `WEEKEND_CITY_ROOT` there.
 
 ## How scripts find the city

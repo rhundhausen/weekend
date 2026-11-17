@@ -1,4 +1,3 @@
-# Based on weekendboise's .gitignore.
 out/
 testResults.xml
 website/public/
