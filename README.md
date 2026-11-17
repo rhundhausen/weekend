@@ -1,6 +1,6 @@
 # weekend
 
-The shared core behind the Weekend city event sites. It reads public event calendars, feeds,
+The shared code behind the Weekend[City] event sites. It reads public event calendars, feeds,
 and APIs, normalizes events to one schema, merges duplicates, checks links, and builds a static
 Hugo site from the result.
 
