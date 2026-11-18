@@ -112,12 +112,8 @@
   <div class="wrap">
     {{- /* The About chip sits at the right of the title line, so the line below never wraps on phones. */}}
     <div class="top-row">
-      {{- if or $category $cityPage }}
-      {{- /* On a category's or city's page the site name links home, as on the About page. */}}
+      {{- /* The site name always links home, so on the main page it also clears the filters. */}}
       <h1 class="brand"><a class="brand site-name" href="{{ relURL "/" }}"><span class="logo" aria-hidden="true"></span>{{ site.Title }}</a></h1>
-      {{- else }}
-      <h1 class="brand"><span class="logo" aria-hidden="true"></span>{{ site.Title }}</h1>
-      {{- end }}
       <a class="top-chip" href="{{ relURL "about/" }}">About</a>
     </div>
     {{- /* Every running source, whether or not it has upcoming events. */}}
