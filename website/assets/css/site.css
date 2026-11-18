@@ -309,7 +309,14 @@ a { color: var(--accent); }
   gap: 3px;
   min-width: 0;
 }
-.field.search { flex: 1 1 240px; }
+.field.search { flex: 1 1 200px; }
+/* Fixed widths on wider screens, so the row breaks in the same place in every city instead of
+   following each city's longest option (a city name, a size or cost range). An open list still
+   shows each option in full. */
+@media (min-width: 761px) {
+  #when, #from, #to, #cost { width: 130px; }
+  #city, #size { width: 160px; }
+}
 .label {
   font-size: 11px;
   font-weight: 600;
