@@ -583,6 +583,12 @@ input:focus-visible, select:focus-visible, button:focus-visible {
   color: var(--page-muted);
 }
 .foot a { color: var(--page-link); }
+/* The About page's credit and version: one line on desktop, two on phones. */
+@media (min-width: 761px) {
+  .foot-line { display: flex; flex-wrap: wrap; align-items: baseline; }
+  .foot-line p { margin: 0; }
+  .foot-line .version::before { content: "|"; padding: 0 8px; opacity: 0.5; }
+}
 
 /* Desktop: one line per event. Long text ends in an ellipsis; hovering shows it in full. */
 @media (min-width: 761px) {
