@@ -13,10 +13,10 @@ An idea needs only `displayName`. An entry with a `name` is a configured source 
 | Field | Required | Notes |
 | --- | --- | --- |
 | `displayName` | always | The place, organization, or site. Unique, ignoring case |
-| `status` | no | `idea` (the default when missing), `investigating`, `feed-found`, `ready`, `running`, or `ruled-out`. Ingest runs only `running` |
+| `status` | no | `idea` (the default when missing) or another status in [Status lifecycle](#status-lifecycle). Ingest runs only `running` |
 | `reason` | `ruled-out` | Why it was ruled out |
 | `name` | `running` | Unique slug, also the per-source output file name. Setting it makes the entry a configured source |
-| `adapter` | configured, `ready` | `cityofboise`, `eventastic`, `googlecalendar`, `ics`, `rss`, `tribe`, `ticketmaster`, `eventbrite`, `eventbrite-search`, `seatgeek`, `songkick`, `bandsintown`, or `scrape`. `other` is allowed on ideas that need a new adapter, never on a configured entry |
+| `adapter` | configured, `ready` | `cityofboise`, `eventastic`, `googlecalendar`, `ics`, `meetup`, `rss`, `sales`, `tribe`, `ticketmaster`, `eventbrite`, `eventbrite-search`, `seatgeek`, `songkick`, `bandsintown`, or `scrape`. `other` is allowed on ideas that need a new adapter, never on a configured entry |
 | `url` | configured, `feed-found`, `ready` | Feed or API endpoint, or the site for an idea |
 | `category` | configured | An id from the categories (`ingestion/vocabulary/categories.json`), used for this source's events. With `inferCategory`, it's the fallback |
 | `inferCategory` | no | `true` chooses each event's category from its tags. Use it for sources that mix many kinds of event. See [schema.md](schema.md#categories-and-tags) |
@@ -40,6 +40,9 @@ Unknown fields fail validation, so a typo can't silently turn a setting off. A n
 | Field | Required | Notes |
 | --- | --- | --- |
 | `locationFilter` | no | Regex. Only events whose `LOCATION` matches are kept. Athletics feeds use it to remove away games |
+| `fixedVenue` | no | `true` uses the entry's venue for every event. The library LibCal feeds need it, because their `LOCATION` names rooms ("Children's Area"), not the building |
+| `excludeTitlePattern` | no | Regex. Matching titles are skipped, such as library closures and board meetings |
+| `localTimeAsUtc` | no | `true` for Events Calendar sites set to UTC+0 (Tamarack Resort): their `?ical=1` feed labels local wall-clock time `TZID=UTC`, which would make every timed event early by the city's UTC offset |
 
 `url` is the ICS feed. `RRULE` isn't expanded yet: a recurring event yields its first occurrence and logs a warning.
 
@@ -142,7 +145,7 @@ Without the key, or when the API answers 403 or 404 (the calendar is not public,
 
 `url` is `https://rest.bandsintown.com`. Requires the `BANDSINTOWN_APP_ID` environment variable. Only dates in the city's state are kept.
 
-No source uses this adapter yet, and it has never run against the live API. Its test fixture is written by hand from the documented response shape. See "Not yet working".
+No source runs this adapter yet, and it has never run against the live API. Its test fixture is written by hand from the documented response shape.
 
 ### scrape
 
@@ -174,6 +177,16 @@ The last resort, for sites with no API or feed. Check for a feed first: a workin
 - **`sveltekit`** reads a SvelteKit chamber site that serves its ChamberMaster calendar as page data (as on staridahochamber.com/events), in one request. The page's `kit.start(...)` call lists `data` for each page node, written as a JavaScript function whose arguments stand in for repeated values; `ConvertFrom-WkJsLiteral` (lib/Scrape.ps1) reads it without running anything. The events node has `events` (Id, Name, Description, StartTime, EndTime, IsAllDay, Slug, in Boise wall-clock time) and `eventDetails` (EventLocation). Each event links to `/events/details/<slug>-<id>`. The venue comes from "(@ Star Library)" in the title, which is then dropped from the title, or "@ Helina Marie's", which stays; otherwise from the location's first line when a street line follows it, else the entry's venue. The city comes from the location, else the entry's city. Set `excludeTitlePattern` for chamber business.
 - **`iheart`** reads an iHeart station's calendar (as on kbco.iheart.com/calendar/), in one request. `url` is the station's `/calendar/` page, whose `window.__PRELOADED_STATE__` page data holds every listed event: title, venue name and address, one or more start times (and an end when set; "hide start time" makes an all-day event), and the station's categories (Concerts, Community, Holiday, and so on), which feed tag matching. A station covers a whole metro, so an event is kept only when its address names the city's state and one of its cities or ZIP codes; one with no address, such as a station promotion, is skipped. Each event links to its page on the station site. Use `inferCategory` with `category` as the fallback.
 
+Compare scraped times with what the site displays before enabling a source. Modern Events Calendar sites write local time as if it were UTC, which makes every event early by the city's UTC offset. Idaho History, Visit Boise, and Bluebird Social need `localTimeAsUtc`.
+
+The adapter's rules, enforced in code and covered by tests:
+
+- It reads `robots.txt` first, and checks every URL against it. A disallowed URL is never requested.
+- If `robots.txt` can't be read, other than a 404, the source fails.
+- A 403 or a challenge page fails the source. It never retries around one or changes its identity. A site that refuses us stays out.
+- Requests are at least 1 second apart, or the site's `Crawl-delay` if that's longer.
+- A `Crawl-delay` over 60 seconds fails the source, so one site can't stall the run. The delay is never ignored.
+
 ### cityofboise
 
 Reads `/umbraco/api/events/events`, the JSON API behind cityofboise.org/events, 10 events a page, 1 second apart, starting today. Times are Boise wall-clock time. Events titled "Canceled - ..." are skipped. No extra fields.
@@ -187,20 +200,6 @@ Reads an RSS 2.0 feed that uses the RSS event module (`ev:` namespace), which ca
 | `venuePrefix` | no | Put in front of each item's `ev:location` to make the venue, so "Arena" becomes "Ford Idaho Center Arena" |
 | `fixedVenue` | no | `true` uses the entry's venue for every event |
 | `excludeTitlePattern` | no | Regex. Matching titles are skipped |
-
-### ics: fixedVenue
-
-`fixedVenue: true` on an `ics` entry uses the entry's venue for every event. The library LibCal feeds need it, because their `LOCATION` names rooms ("Children's Area"), not the building. `excludeTitlePattern` (regex) skips matching titles, such as library closures and board meetings. `localTimeAsUtc: true` is for Events Calendar sites set to UTC+0 (Tamarack Resort): their `?ical=1` feed labels local wall-clock time `TZID=UTC`, which would make every timed event early by the city's UTC offset.
-
-Compare scraped times with what the site displays before enabling a source. Modern Events Calendar sites write local time as if it were UTC, which makes every event early by the city's UTC offset. Idaho History, Visit Boise, and Bluebird Social need `localTimeAsUtc`.
-
-The adapter's rules, enforced in code and covered by tests:
-
-- It reads `robots.txt` first, and checks every URL against it. A disallowed URL is never requested.
-- If `robots.txt` can't be read, other than a 404, the source fails.
-- A 403 or a challenge page fails the source. It never retries around one or changes its identity. A site that refuses us stays out.
-- Requests are at least 1 second apart, or the site's `Crawl-delay` if that's longer.
-- A `Crawl-delay` over 60 seconds fails the source, so one site can't stall the run. The delay is never ignored.
 
 ## Finding an ICS feed
 

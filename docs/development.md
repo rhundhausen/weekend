@@ -29,8 +29,8 @@ entry in its `sources.json` or `data/schema/`, or a website file at the same pat
 Cities track this repo's `main`, with no version pinning: a core push reaches a city at its
 next workflow run or site build.
 
-Values the core derives from `city.json` (`lib/City.ps1`): the User-Agent
-`<siteName>/1.0 (+https://github.com/<repo>)`, the robots.txt token (the site name), the data
+Values the core derives from `city.json` (`ingestion/scripts/lib/City.ps1`): the User-Agent
+`<siteName>/1.0 (+https://github.com/<repo>)`, the robots.txt token (the site name in lowercase), the data
 commit identity "`<siteName>` bot", and the report sender `<siteName> Reports <reports@<domain>>`.
 
 ## How it works
@@ -229,7 +229,9 @@ Pester tests and the Worker's tests on every push and pull request.
   - **Attachments:** each email attaches the run's `out/` folder and the logs of the run's finished
     jobs as zips. Together they stay under 28 MB; a zip that doesn't fit is left off and the email
     says so.
-  - **Resend:** the city's domain must be verified in Resend, with `RESEND_API_KEY` scoped to it.
+  - **Resend:** the city's domain must be verified in Resend, and `RESEND_API_KEY` must be allowed
+    to send from it: a key scoped to that domain, or one for all domains. A key scoped to another
+    city's domain fails with HTTP 403, "This API key is not authorized to send emails from ...".
     The emails come from the city's `reportFrom`, with `reply_to` set to `REPORT_EMAIL`, so a reply
     reaches a person rather than the unmonitored reports@ address. A failed send fails the step.
   - **Previewing locally:** `../weekend/ingestion/scripts/Send-Report.ps1 -Kind ingest -PreviewPath

@@ -47,8 +47,12 @@ plus `RESEND_API_KEY` and `REPORT_EMAIL` for the report emails (one address, or 
 by commas). A secret you don't create reaches the scripts as empty: that source fails with a
 warning while the rest run, and without the Resend secrets the email step warns and sends nothing.
 
-For the emails, verify the city's domain in Resend (resend.com > Domains) and create an API key
-scoped to it with sending access. The sender, `<siteName> Reports <reports@<domain>>`, comes from
+For the emails, add the city's domain in Resend (resend.com > Domains > Add Domain). Resend lists
+the DNS records it needs; add each one in Cloudflare (the domain's DNS > Records) exactly as shown,
+set to DNS only (grey cloud), then click Verify. The `resend._domainkey` TXT record holds a signing
+key Resend makes for each domain, so copy it from Resend, never from another city. Then use an API
+key with sending access that covers the domain: one scoped to it, or one for all domains, which
+also covers cities added later. The sender, `<siteName> Reports <reports@<domain>>`, comes from
 `city.json`, not a secret.
 
 ## 4. Cloudflare

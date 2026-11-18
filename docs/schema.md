@@ -51,7 +51,7 @@ When duplicates merge, the best source keeps its own `costTier`, and a duplicate
 
 Every event has one primary category and any number of tags. Tags cross categories: a free family Christmas concert is `holiday-seasonal`, tagged `concert`, `free-admission`, and `family-friendly`.
 
-The core's vocabulary in `ingestion/vocabulary/` holds the categories and tags every city shares, and a city adds to them in its own `data/schema/` files of the same names. `categories.json` holds the 12 categories. Their ids are also enums in both schemas, and a test keeps all three in step.
+The core's vocabulary in `ingestion/vocabulary/` holds the categories and tags every city shares, and a city adds to them in its own `data/schema/` files of the same names. `categories.json` holds the 13 categories. Their ids are also enums in both schemas, and a test keeps all three in step.
 
 `tags.json` holds the tags:
 
