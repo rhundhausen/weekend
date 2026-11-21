@@ -240,12 +240,21 @@ function render() {
   el.libraryChip.classList.toggle('empty', !libraries);
   // The phone's "More filters" button counts the filters set behind it.
   const hidden = (state.from || state.to ? 1 : 0) + (state.size ? 1 : 0) + (state.cost ? 1 : 0) + state.cats.size + (state.meetup ? 1 : 0) + (state.library ? 1 : 0);
-  el.moreCount.textContent = hidden ? ` (${hidden})` : '';
+  // The number alone: site.css adds the brackets on wider screens and draws a badge on phones.
+  el.moreCount.textContent = hidden ? String(hidden) : '';
+  // Phones show Reset only while something is set.
+  el.controls.classList.toggle('filtered', Boolean(hidden || state.q || state.when || state.city || state.source));
   renderSourceNote();
   renderRows(slice);
-  el.count.textContent = shown.length
-    ? `Showing ${numFmt.format(start + 1)} to ${numFmt.format(start + slice.length)} of ${numFmt.format(shown.length)} events`
-    : 'No events match these filters';
+  // "Showing 1 to 25 of 2,241 events"; phones hide the range and show "2,241 events".
+  if (shown.length) {
+    const range = document.createElement('span');
+    range.className = 'count-range';
+    range.textContent = `Showing ${numFmt.format(start + 1)} to ${numFmt.format(start + slice.length)} of `;
+    el.count.replaceChildren(range, `${numFmt.format(shown.length)} events`);
+  } else {
+    el.count.textContent = 'No events match these filters';
+  }
   renderPager(el.pagerTop, pages);
   renderPager(el.pagerBottom, pages);
   renderSortHeaders();
@@ -593,7 +602,7 @@ el.reset.addEventListener('click', resetAll);
 function setMoreOpen(open) {
   el.controls.classList.toggle('open', open);
   el.more.setAttribute('aria-expanded', open ? 'true' : 'false');
-  el.more.firstChild.textContent = open ? 'Fewer filters' : 'More filters';
+  el.more.querySelector('.more-label').textContent = open ? 'Fewer filters' : 'More filters';
 }
 el.more.addEventListener('click', () => setMoreOpen(!el.controls.classList.contains('open')));
 // Choosing "Custom dates" opens the panel, so the From and To boxes are there to fill in.

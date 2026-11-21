@@ -347,6 +347,8 @@ input:focus-visible, select:focus-visible, button:focus-visible {
 /* Dimmed text, not transparency, so a disabled button stays solid on the colored page. */
 .btn:disabled { color: color-mix(in srgb, var(--muted) 50%, var(--surface)); background: var(--surface); cursor: default; }
 .btn.small { height: 28px; padding: 0 9px; font-size: 12px; }
+/* Phone-only parts of the filter row (see the phone rules below). */
+.i-filter, .row-break { display: none; }
 
 .chips {
   display: flex;
@@ -657,8 +659,39 @@ input:focus-visible, select:focus-visible, button:focus-visible {
   .field.search { flex-basis: 100%; }
   .field { flex: 1 1 140px; }
   .field.date { flex: 1 1 130px; }
-  .btn#reset, .btn#more { flex: 1 1 calc(50% - 5px); }
-  /* From, To, Venue Size, Cost, and the chips stay hidden until "More filters" opens them. */
+  /* One line under Search: When, City, the filter icon, and Reset (only while a filter is set).
+     From, To, Venue Size, and Cost follow on the next lines when the filter icon opens them. */
+  .row > .field:has(#when) { order: 1; flex: 1 1 0; }
+  .row > .field:has(#city) { order: 2; flex: 1 1 0; }
+  .btn#more { order: 3; flex: 0 0 auto; position: relative; width: 40px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+  .btn#reset { order: 4; flex: 0 0 auto; padding: 0 10px; }
+  .controls:not(.filtered) .btn#reset { display: none; }
+  .row-break { display: block; order: 5; flex-basis: 100%; height: 0; }
+  .row > .field.more { order: 6; }
+  .controls:not(.open) .row-break { display: none; }
+  .btn#more[aria-expanded="true"] { color: var(--accent-text); background: var(--accent); border-color: var(--accent); }
+  /* The label stays for screen readers; the icon is what shows. */
+  .more-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .i-filter { display: block; }
+  #more-n:not(:empty) {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 16px;
+    color: var(--accent-text);
+    background: var(--accent);
+    border: 1px solid var(--surface);
+    border-radius: 8px;
+  }
+  /* The count reads "2,241 events", and the pager shows only below the list. */
+  .count-range { display: none; }
+  #pager-top { display: none; }
+  /* From, To, Venue Size, Cost, and the chips stay hidden until the filter icon opens them. */
   .controls:not(.open) .more { display: none; }
   .grid thead { display: none; }
   .grid, .grid tbody, .grid tr, .grid td { display: block; width: 100%; }

@@ -212,8 +212,11 @@
           <option value="3">$$${{ index $costRange "3" }}</option>
         </select>
       </label>
-      <button id="more" class="btn more-toggle" type="button" aria-expanded="false" aria-controls="from-field to-field size-field cost-field chips-row">More filters<span id="more-n"></span></button>
+      {{- /* On phones the button shrinks to a filter icon after City, with a badge counting the
+           filters set behind it, and Reset shows only while a filter is set (site.css). */}}
+      <button id="more" class="btn more-toggle" type="button" aria-expanded="false" aria-controls="from-field to-field size-field cost-field chips-row"><span class="more-label">More filters</span><svg class="i-filter" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3 5h18l-7 8.5V19l-4 2v-7.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg><span id="more-n"></span></button>
       <button id="reset" class="btn" type="button">Reset</button>
+      <span class="row-break" aria-hidden="true"></span>
     </div>
     {{- /* Category chips, then the Meetup and library toggles on the same row. Meetup events are
          hidden until that box is checked, because Meetup groups are only partly public; library
