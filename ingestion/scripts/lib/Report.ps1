@@ -356,7 +356,7 @@ function New-WkLocalReminder {
       , @("1. Open PowerShell 7 in your $(((Get-WkCity).repo -split '/')[-1]) folder.")
       , @('2. Run: ./ingestion/scripts/Invoke-LocalIngest.ps1')
       , @('3. It pulls, runs the local sources, commits data/raw-events.json, and pushes. It takes a minute or two.')
-      , @('4. The push starts the refine workflow, which updates the site a few minutes later.')
+      , @('4. It then starts the refine workflow with the GitHub CLI (gh), which updates the site about 20 minutes later.')
       , @(@{ Text = "Refine runs: $actions"; Url = $actions })
       , @('If a source fails from home too, the run says so; its last events stay on the site.')
     )

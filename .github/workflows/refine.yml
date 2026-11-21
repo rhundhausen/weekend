@@ -1,5 +1,5 @@
 # Nightly refine, stage 2 of 2, as a reusable workflow. A city repo's own refine.yml holds only the
-# triggers (each completed ingest run, a pushed raw file, or by hand) and calls this:
+# triggers (the scheduled ingest run completing, or by hand) and calls this:
 #
 #   jobs:
 #     nightly:

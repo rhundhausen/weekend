@@ -172,8 +172,8 @@ Pester tests and the Worker's tests on every push and pull request.
 - **When:** a city's ingest runs at midnight in its time zone. Cron is UTC and daylight saving
   moves the offset, so the caller schedules both candidate UTC hours and the core's first job,
   `Test-LocalHour.ps1`, skips the one that isn't midnight in the city that day. Refine has no
-  cron: it starts with `workflow_run` each time an ingest run on `main` completes, scheduled or
-  manual, **whether ingest succeeded or failed**, so past events still move to the archive and
+  cron: it starts with `workflow_run` each time the scheduled ingest run on `main` completes,
+  **whether ingest succeeded or failed**, so past events still move to the archive and
   links still get checked when every source is down. Its first job, `Test-IngestRan.ps1`, reads the
   ingest run's jobs through the GitHub API and skips the run whose ingest job was skipped, so
   refine runs once a night. Both share the concurrency group `data`, so a manual refine waits for a
@@ -185,7 +185,8 @@ Pester tests and the Worker's tests on every push and pull request.
 - **Ingest** fetches, uploads `out/` as the `out` artifact, then `Publish-Data.ps1` commits
   `data/raw-events.json` alone, with `[skip ci]` so Cloudflare doesn't deploy a commit the site
   doesn't read. Run it by hand from the city repo's Actions > ingest > Run workflow, with an
-  optional `source` input to fetch one source.
+  optional `source` input to fetch one source. A manual ingest does not start refine, so run
+  refine by hand after it when the site should pick up its events.
 - **Refine** checks out the head of `main`, so it sees the raw file ingest just committed, logs the
   raw file's `asOf` and source count, and fails with a clear message if there is no raw file. It
   uploads `out/` as the `refine-out` artifact, then commits `data/events.json`, `data/archive/`,
@@ -211,8 +212,9 @@ Pester tests and the Worker's tests on every push and pull request.
   ingest skips them and keeps their last fetch in the raw file, so their events stay on the site.
   `Invoke-LocalIngest.ps1`, run from the city repo on a PC about once a week, pulls, runs
   `Invoke-Ingest.ps1 -Local` (only those sources; the raw file's `asOf` is kept), commits
-  `data/raw-events.json`, and pushes. That push starts refine through its `push` trigger on
-  `data/raw-events.json`, so the commit has no `[skip ci]`. The scheduled ingest at midnight
+  `data/raw-events.json`, pushes, and starts refine by hand with `gh workflow run` (no workflow
+  starts on a push; without `gh`, the events wait for the next nightly refine). The commit has no
+  `[skip ci]`, so the city's test workflow checks it. The scheduled ingest at midnight
   Sunday emails a reminder (`Send-LocalReminder.ps1`) listing each local source's last fetch and
   the command to run.
 - **Report emails:** each workflow ends with a `report` job that runs after the main job, even when
