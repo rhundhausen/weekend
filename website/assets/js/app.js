@@ -628,8 +628,20 @@ for (const th of document.querySelectorAll('th[data-sort] button')) {
     render();
   });
 }
+// List or map. The map is not built yet, so Map only shows a short note and the list stays.
+const viewNote = $('view-note');
+let viewNoteTimer = 0;
+document.querySelector('.view-toggle')?.addEventListener('click', (ev) => {
+  const b = ev.target.closest('.view-btn');
+  if (!b || b.dataset.view !== 'map') return;
+  viewNote.textContent = 'Map view is coming soon. For now, events are shown as a list.';
+  viewNote.hidden = false;
+  clearTimeout(viewNoteTimer);
+  viewNoteTimer = setTimeout(() => { viewNote.hidden = true; }, 4000);
+});
 document.addEventListener('keydown', (ev) => {
-  if (ev.key === '/' && document.activeElement?.tagName !== 'INPUT') {
+  if (ev.key === 'Escape' && viewNote && !viewNote.hidden) viewNote.hidden = true;
+  if (ev.key === '/'&& document.activeElement?.tagName !== 'INPUT') {
     ev.preventDefault();
     el.q.focus();
   }

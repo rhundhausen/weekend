@@ -232,7 +232,15 @@
   </section>
 
   <div class="status">
-    <p id="count" aria-live="polite">Loading events</p>
+    <div class="status-left">
+      {{- /* List or map. The map is not built yet: choosing it only shows a short note (app.js). */}}
+      <div class="view-toggle" role="group" aria-label="View">
+        <button type="button" class="view-btn" data-view="list" aria-pressed="true">List</button>
+        <button type="button" class="view-btn" data-view="map" aria-pressed="false">Map</button>
+      </div>
+      <p id="count" aria-live="polite">Loading events</p>
+    </div>
+    <p class="view-note" id="view-note" role="status" hidden></p>
     <nav class="pager" id="pager-top" aria-label="Pages"></nav>
   </div>
 

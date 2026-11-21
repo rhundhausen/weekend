@@ -425,6 +425,46 @@ input:focus-visible, select:focus-visible, button:focus-visible {
   margin: 6px 0 8px;
   scroll-margin-top: 8px;
 }
+.status { position: relative; }
+.status-left { display: flex; align-items: center; gap: 10px; }
+/* List or map, as two joined buttons; the chosen one is filled. */
+.view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.view-btn {
+  height: 28px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--surface);
+  border: 0;
+  cursor: pointer;
+}
+.view-btn + .view-btn { border-left: 1px solid var(--border); }
+.view-btn:hover { color: var(--accent); }
+.view-btn[aria-pressed="true"] { color: var(--accent-text); background: var(--accent); }
+/* The "coming soon" note under the toggle when Map is clicked. */
+.view-note {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 5;
+  margin: 0;
+  max-width: min(340px, calc(100vw - 32px));
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+}
 #count {
   margin: 0;
   font-size: 13px;
