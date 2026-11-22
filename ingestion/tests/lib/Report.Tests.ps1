@@ -266,3 +266,61 @@ Describe 'New-WkLocalReminder' {
     $reminder.Text | Should -Match '\./ingestion/scripts/Invoke-LocalIngest\.ps1'
   }
 }
+
+Describe 'New-WkNightlyReport' {
+  BeforeAll {
+    $script:nightlyRefine = [pscustomobject]@{
+      startedAt = '2026-11-07T07:06:00Z'; finishedAt = '2026-11-07T07:22:30Z'; asOf = '2026-11-07T07:00:00Z'
+      rawSources = 3; rawEvents = 120; upcoming = 100; past = 5; cityFixes = 1
+      skipLinkCheck = $false
+      categories = [pscustomobject]@{ music = 60 }
+      links = [pscustomobject]@{ checked = 80; broken = 1; newBroken = 1 }
+      sources = [pscustomobject]@{ good = 100 }
+    }
+    $script:nightlyLinks = [pscustomobject]@{
+      broken = @([pscustomobject]@{ title = 'Gone Show'; start = '2026-11-20T19:00:00-07:00'; url = 'https://good.test/gone'; reason = 'HTTP 404'; new = $true; sources = 'good' })
+    }
+    $script:ingestPart = New-WkIngestReport -Run $run -Sources $sources -Context @{ Outcome = 'success'; RunUrl = 'https://github.test/runs/1'; Trigger = 'schedule' }
+    $script:refinePart = New-WkRefineReport -Refine $nightlyRefine -Links $nightlyLinks -Sources $sources -Context @{ Outcome = 'success'; RunUrl = 'https://github.test/runs/2'; Trigger = 'workflow_run'; Attachment = 'out.zip (1 KB); refine-out.zip (2 KB)' }
+    $script:nightly = New-WkNightlyReport -Ingest $ingestPart -Refine $refinePart
+  }
+
+  It 'sums up both runs in the subject' {
+    $nightly.Subject | Should -BeExactly 'WeekendBoise Nightly: ingest 2 of 3 sources ok, 120 events, 1 failed; refine 100 upcoming, 1 broken links (1 new)'
+  }
+
+  It 'has every section of both reports, the two run summaries first and the sources not running last' {
+    $titles = @($nightly.Sections.Title)
+    $titles[0] | Should -BeExactly 'Ingest: Run'
+    $titles[1] | Should -BeExactly 'Refine: Run'
+    $titles | Should -Contain 'Ingest: Failed (1)'
+    $titles | Should -Contain 'Ingest: Succeeded (2)'
+    $titles | Should -Contain 'Refine: Broken links (1)'
+    $titles | Should -Contain 'Refine: Upcoming events by source'
+    $titles[-1] | Should -BeLike 'Not running:*'
+    $titles.Count | Should -Be ($ingestPart.Sections.Count + $refinePart.Sections.Count)
+  }
+
+  It 'links both workflow runs and keeps the details of each' {
+    $nightly.Text | Should -Match 'https://github\.test/runs/1'
+    $nightly.Text | Should -Match 'https://github\.test/runs/2'
+    $nightly.Text | Should -Match 'HTTP 405 from https://blocked\.test/events/'
+    $nightly.Text | Should -Match 'NEW Gone Show'
+    $nightly.Html | Should -Match '<h2[^>]*>Refine: Broken links \(1\)</h2>'
+  }
+
+  It 'says FAILED next to the run that failed' {
+    $failedRefine = New-WkRefineReport -Refine $null -Links $null -Sources $sources -Context @{ Outcome = 'failure'; RunUrl = 'u' }
+    (New-WkNightlyReport -Ingest $ingestPart -Refine $failedRefine).Subject |
+      Should -BeExactly 'WeekendBoise Nightly FAILED: ingest 2 of 3 sources ok, 120 events, 1 failed; refine FAILED, no refine.json'
+  }
+
+  It 'carries the Sunday local ingest reminder after the run summaries' {
+    $localSources = @([pscustomobject]@{ name = 'home'; displayName = 'Home Only Hall'; status = 'running'; local = $true; url = 'https://home.test/' })
+    $reminder = New-WkLocalReminder -Sources $localSources -Raw ([pscustomobject]@{ sources = [pscustomobject]@{} })
+    $report = New-WkNightlyReport -Ingest $ingestPart -Refine $refinePart -Reminder $reminder
+    $report.Subject | Should -BeLike '*; run the local ingest this week'
+    $report.Sections[2].Title | Should -BeExactly 'Local ingest reminder: What this is for'
+    $report.Text | Should -Match '\./ingestion/scripts/Invoke-LocalIngest\.ps1'
+  }
+}

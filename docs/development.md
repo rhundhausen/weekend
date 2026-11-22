@@ -214,14 +214,20 @@ Pester tests and the Worker's tests on every push and pull request.
   `Invoke-Ingest.ps1 -Local` (only those sources; the raw file's `asOf` is kept), commits
   `data/raw-events.json`, pushes, and starts refine by hand with `gh workflow run` (no workflow
   starts on a push; without `gh`, the events wait for the next nightly refine). The commit has no
-  `[skip ci]`, so the city's test workflow checks it. The scheduled ingest at midnight
-  Sunday emails a reminder (`Send-LocalReminder.ps1`) listing each local source's last fetch and
-  the command to run.
+  `[skip ci]`, so the city's test workflow checks it. The nightly email after the
+  scheduled ingest at midnight Sunday includes a reminder listing each local source's last fetch
+  and the command to run.
 - **Report emails:** each workflow ends with a `report` job that runs after the main job, even when
   it failed. It is a separate job because GitHub serves a job's log only once that job has
   finished. It downloads the main job's artifact, saves the finished jobs' logs with
   `Save-RunLogs.ps1` (needs `actions: read`), and `Send-Report.ps1` builds a summary and sends it
   with the Resend API to `REPORT_EMAIL`.
+  - **One email a night:** after the scheduled midnight ingest, ingest's `report` job doesn't run.
+    The refine that follows it downloads that ingest run's `out` artifact and saves its job logs
+    too, and sends one "Nightly" email (`Send-Report.ps1 -Kind nightly`) with every section of
+    both reports, titled "Ingest: ..." and "Refine: ...", the two run summaries first. On Sunday
+    it also carries the local ingest reminder. A manual ingest or a manual refine emails its own
+    report as below.
   - **Ingest's email:** start, finish, and duration; sources that failed, with their page and
     error (such as `HTTP 405`); warnings; events per source, most first; the sources not running
     yet (ready, investigating, ideas); and the ruled-out sources with the reason for each.
@@ -229,7 +235,8 @@ Pester tests and the Worker's tests on every push and pull request.
     filled in, link check counts, broken links grouped by source (new ones marked), and events by
     category and source.
   - **Attachments:** each email attaches the run's `out/` folder and the logs of the run's finished
-    jobs as zips. Together they stay under 28 MB; a zip that doesn't fit is left off and the email
+    jobs as zips; the nightly email attaches both runs' (`out.zip`, `ingest-logs.zip`,
+    `refine-out.zip`, `refine-logs.zip`). Together they stay under 28 MB; a zip that doesn't fit is left off and the email
     says so.
   - **Resend:** the city's domain must be verified in Resend, and `RESEND_API_KEY` must be allowed
     to send from it: a key scoped to that domain, or one for all domains. A key scoped to another
@@ -238,8 +245,9 @@ Pester tests and the Worker's tests on every push and pull request.
     reaches a person rather than the unmonitored reports@ address. A failed send fails the step.
   - **Previewing locally:** `../weekend/ingestion/scripts/Send-Report.ps1 -Kind ingest -PreviewPath
     ./out/report` writes `out/report.txt` and `.html`, and sends nothing unless both secrets are
-    set as environment variables. `Send-LocalReminder.ps1 -Force -PreviewPath ./out/reminder`
-    previews the reminder.
+    set as environment variables. `-Kind nightly` previews the combined email from `ingest-out/`
+    (ingest's `out/`) and `out/` (refine's). `Send-LocalReminder.ps1 -Force -PreviewPath
+    ./out/reminder` previews the reminder on its own; no workflow sends it separately any more.
 
 Each city repo needs these secrets (Settings > Secrets and variables > Actions). An unset secret
 reaches the scripts as empty. Only the ingest step gets the API keys; both workflows' email steps

@@ -1,5 +1,6 @@
 # The ingest and refine summary emails: built from out/run.json, out/refine.json, and
-# out/links.json, and sent with the Resend API. Each report is a list of sections, rendered
+# out/links.json, and sent with the Resend API. After the scheduled midnight ingest, the two are
+# sent as one nightly email (New-WkNightlyReport) by refine's report job. Each report is a list of sections, rendered
 # once as plain text and once as HTML so mail clients can pick. Names, links, and times come
 # from the city's city.json.
 
@@ -167,14 +168,15 @@ function New-WkIngestReport {
       )
     )
     $heading = "$((Get-WkCity).siteName) Ingest FAILED: no run.json"
-    return @{ Subject = $heading; Text = ConvertTo-WkReportText $heading $sections; Html = ConvertTo-WkReportHtml $heading $sections }
+    return @{ Subject = $heading; Text = ConvertTo-WkReportText $heading $sections; Html = ConvertTo-WkReportHtml $heading $sections; Sections = $sections; Summary = 'no run.json'; Failed = $true }
   }
 
   $results = @($Run.sources)
   $ok = @($results | Where-Object status -eq 'ok')
   $failed = @($results | Where-Object status -ne 'ok')
   $events = ($results | Measure-Object fetched -Sum).Sum
-  $subject = "$((Get-WkCity).siteName) Ingest$($failedPrefix): $($ok.Count) of $($results.Count) sources ok, $events events$($failed.Count ? ", $($failed.Count) failed" : '')"
+  $summary = "$($ok.Count) of $($results.Count) sources ok, $events events$($failed.Count ? ", $($failed.Count) failed" : '')"
+  $subject = "$((Get-WkCity).siteName) Ingest$($failedPrefix): $summary"
   $pageOf = { param($name) $entry = $Sources | Where-Object name -eq $name | Select-Object -First 1; "$($entry.url)" }
 
   $trigger = "$($Context.Trigger)"
@@ -218,7 +220,7 @@ function New-WkIngestReport {
       )))
   $sections.Add((Get-WkWaitingSections $Sources))
 
-  @{ Subject = $subject; Text = ConvertTo-WkReportText $subject $sections; Html = ConvertTo-WkReportHtml $subject $sections }
+  @{ Subject = $subject; Text = ConvertTo-WkReportText $subject $sections; Html = ConvertTo-WkReportHtml $subject $sections; Sections = $sections.ToArray(); Summary = $summary; Failed = [bool]$failedPrefix }
 }
 
 function New-WkRefineReport {
@@ -254,10 +256,11 @@ function New-WkRefineReport {
       )
     )
     $heading = "$((Get-WkCity).siteName) Refine FAILED: no refine.json"
-    return @{ Subject = $heading; Text = ConvertTo-WkReportText $heading $sections; Html = ConvertTo-WkReportHtml $heading $sections }
+    return @{ Subject = $heading; Text = ConvertTo-WkReportText $heading $sections; Html = ConvertTo-WkReportHtml $heading $sections; Sections = $sections; Summary = 'no refine.json'; Failed = $true }
   }
 
-  $subject = "$((Get-WkCity).siteName) Refine$($failedPrefix): $($Refine.upcoming) upcoming, $($Refine.links.broken) broken links ($($Refine.links.newBroken) new)"
+  $summary = "$($Refine.upcoming) upcoming, $($Refine.links.broken) broken links ($($Refine.links.newBroken) new)"
+  $subject = "$((Get-WkCity).siteName) Refine$($failedPrefix): $summary"
   $linkLine = if ($Refine.skipLinkCheck) { 'Link check skipped; known link results still applied' } else { "$($Refine.links.checked)" }
   $lookup = $Refine.cityLookup
   $lookupLine = if (-not $lookup) { 'not run' }
@@ -307,7 +310,7 @@ function New-WkRefineReport {
         $Refine.sources.PSObject.Properties | Sort-Object { -[int]$_.Value } | ForEach-Object { , @((Get-WkSourceLabel $_.Name $Sources), "$($_.Value)") }
       )))
 
-  @{ Subject = $subject; Text = ConvertTo-WkReportText $subject $sections; Html = ConvertTo-WkReportHtml $subject $sections }
+  @{ Subject = $subject; Text = ConvertTo-WkReportText $subject $sections; Html = ConvertTo-WkReportHtml $subject $sections; Sections = $sections.ToArray(); Summary = $summary; Failed = [bool]$failedPrefix }
 }
 
 function Test-WkReminderDay {
@@ -363,7 +366,54 @@ function New-WkLocalReminder {
   )
   if ($RunUrl) { $sections += New-WkReportSection -Title 'Sent by' -Kind pairs -Rows @(, @('Ingest run:', @{ Text = $RunUrl; Url = $RunUrl })) }
 
-  @{ Subject = $subject; Text = ConvertTo-WkReportText $subject $sections; Html = ConvertTo-WkReportHtml $subject $sections }
+  @{ Subject = $subject; Text = ConvertTo-WkReportText $subject $sections; Html = ConvertTo-WkReportHtml $subject $sections; Sections = $sections }
+}
+
+function New-WkNightlyReport {
+  <#
+  .SYNOPSIS
+    The one nightly email after the scheduled midnight ingest and the refine that follows it:
+    Subject, Text, and Html.
+  .DESCRIPTION
+    Every section of both reports, each titled "Ingest: ..." or "Refine: ...": the two Run
+    summaries first, then the Sunday local ingest reminder when there is one, then ingest's failed,
+    warned, and succeeded sources, then refine's broken links, city lookup errors, and counts, and
+    last the sources that are not running yet.
+  .PARAMETER Ingest
+    New-WkIngestReport's result.
+  .PARAMETER Refine
+    New-WkRefineReport's result.
+  .PARAMETER Reminder
+    New-WkLocalReminder's result, built without RunUrl, on the Sunday run; otherwise $null.
+  #>
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory)][hashtable]$Ingest,
+    [Parameter(Mandatory)][hashtable]$Refine,
+    [AllowNull()][hashtable]$Reminder
+  )
+
+  $retitle = {
+    param($section, [string]$Prefix)
+    New-WkReportSection -Title "$($Prefix): $($section.Title)" -Kind $section.Kind -Rows $section.Rows -Note $section.Note -Groups $section.Groups
+  }
+  $ingestSections = @($Ingest.Sections)
+  $refineSections = @($Refine.Sections)
+  $waiting = @($ingestSections | Where-Object { "$($_.Title)" -like 'Not running:*' })
+  $ingestRest = @($ingestSections | Select-Object -Skip 1 | Where-Object { "$($_.Title)" -notlike 'Not running:*' })
+
+  $sections = [Collections.Generic.List[object]]::new()
+  $sections.Add((& $retitle $ingestSections[0] 'Ingest'))
+  $sections.Add((& $retitle $refineSections[0] 'Refine'))
+  if ($Reminder) { foreach ($section in $Reminder.Sections) { $sections.Add((& $retitle $section 'Local ingest reminder')) } }
+  foreach ($section in $ingestRest) { $sections.Add((& $retitle $section 'Ingest')) }
+  foreach ($section in @($refineSections | Select-Object -Skip 1)) { $sections.Add((& $retitle $section 'Refine')) }
+  foreach ($section in $waiting) { $sections.Add($section) }
+
+  $part = { param([string]$Name, [hashtable]$Report) "$Name $($Report.Failed ? 'FAILED, ' : '')$($Report.Summary)" }
+  $failedPrefix = if ($Ingest.Failed -or $Refine.Failed) { ' FAILED' } else { '' }
+  $subject = "$((Get-WkCity).siteName) Nightly$($failedPrefix): $(& $part 'ingest' $Ingest); $(& $part 'refine' $Refine)$($Reminder ? '; run the local ingest this week' : '')"
+  @{ Subject = $subject; Text = ConvertTo-WkReportText $subject $sections; Html = ConvertTo-WkReportHtml $subject $sections; Sections = $sections.ToArray() }
 }
 
 function Send-WkReport {

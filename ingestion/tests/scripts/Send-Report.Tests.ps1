@@ -77,6 +77,31 @@ Describe 'Send-Report' {
     Get-Content "$preview.txt" -Raw | Should -Match 'Attached: +refine-out\.zip \([^)]*\); no job logs'
   }
 
+  It 'sends one nightly email with both reports and all four zips' {
+    $ingestOut = Join-Path $TestDrive "ingest-out-$([guid]::NewGuid().ToString('n'))"
+    $null = New-Item -ItemType Directory -Path $ingestOut
+    @{ startedAt = '2026-11-07T07:00:05Z'; finishedAt = '2026-11-07T07:01:05Z'; asOf = '2026-11-07T07:00:00Z'; sources = @(@{ name = 'alpha'; status = 'ok'; fetched = 3; duration = '1s'; warnings = @() }) } |
+      ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $ingestOut 'run.json')
+    $ingestLogs = Join-Path $TestDrive "ingest-logs-$([guid]::NewGuid().ToString('n'))"
+    $null = New-Item -ItemType Directory -Path $ingestLogs
+    'ingest output' | Set-Content -LiteralPath (Join-Path $ingestLogs 'ingest.log')
+    @{ startedAt = '2026-11-07T07:06:00Z'; finishedAt = '2026-11-07T07:20:00Z'; asOf = '2026-11-07T07:00:00Z'; upcoming = 3; links = @{ checked = 3; broken = 0; newBroken = 0 }; categories = @{}; sources = @{ alpha = 3 } } |
+      ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $out 'refine.json')
+    $logs = Join-Path $TestDrive "logs-$([guid]::NewGuid().ToString('n'))"
+    $null = New-Item -ItemType Directory -Path $logs
+    'refine output' | Set-Content -LiteralPath (Join-Path $logs 'refine.log')
+    $zipDir = Join-Path $TestDrive "zip-$([guid]::NewGuid().ToString('n'))"
+    $preview = Join-Path $TestDrive 'preview-nightly'
+    & $send -Kind nightly -OutDir $out -LogDir $logs -IngestOutDir $ingestOut -IngestLogDir $ingestLogs -IngestOutcome success -IngestRunUrl 'https://github.test/runs/1' `
+      -Outcome success -RunUrl 'https://github.test/runs/2' -SourcesPath $sourcesPath -PreviewPath $preview -ZipDir $zipDir -WarningAction SilentlyContinue
+    Get-Content "$preview.txt" -TotalCount 1 | Should -BeExactly 'WeekendBoise Nightly: ingest 1 of 1 sources ok, 3 events; refine 3 upcoming, 0 broken links (0 new)'
+    $text = Get-Content "$preview.txt" -Raw
+    $text | Should -Match '== Ingest: Run =='
+    $text | Should -Match '== Refine: Run =='
+    $text | Should -Match 'Attached: +out\.zip \([^)]*\), ingest-logs\.zip \([^)]*\); refine-out\.zip \([^)]*\), refine-logs\.zip'
+    foreach ($name in 'out.zip', 'ingest-logs.zip', 'refine-out.zip', 'refine-logs.zip') { Test-Path -LiteralPath (Join-Path $zipDir $name) | Should -BeTrue }
+  }
+
   It 'reports a refine that wrote no refine.json' {
     $preview = Join-Path $TestDrive 'preview-refine'
     & $send -Kind refine -OutDir $out -SourcesPath $sourcesPath -PreviewPath $preview -Outcome failure -WarningAction SilentlyContinue

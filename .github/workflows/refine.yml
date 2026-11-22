@@ -144,6 +144,26 @@ jobs:
           name: refine-out
           path: out
 
+      # After the scheduled ingest, this job sends the one nightly email with both reports, so it
+      # also gets that ingest run's output and job logs (its own report job doesn't run).
+      - name: Download the ingest run's output
+        if: github.event_name == 'workflow_run' && github.event.workflow_run.event == 'schedule'
+        continue-on-error: true
+        uses: actions/download-artifact@v5
+        with:
+          name: out
+          path: ingest-out
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Save the ingest run's job logs
+        if: github.event_name == 'workflow_run' && github.event.workflow_run.event == 'schedule'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: ./.core/ingestion/scripts/Save-RunLogs.ps1 -OutDir ./ingest-logs
+
       # Never blocks the email: without logs, the email says so.
       - name: Save the job logs
         continue-on-error: true
@@ -160,4 +180,7 @@ jobs:
           JOB_STATUS: ${{ needs.refine.result }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           EVENT: ${{ github.event_name }}
-        run: ./.core/ingestion/scripts/Send-Report.ps1 -Kind refine
+          KIND: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'schedule') && 'nightly' || 'refine' }}
+          INGEST_STATUS: ${{ github.event.workflow_run.conclusion }}
+          INGEST_RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: ./.core/ingestion/scripts/Send-Report.ps1 -Kind $env:KIND

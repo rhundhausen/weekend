@@ -1,13 +1,15 @@
 #Requires -Version 7.4
 <#
 .SYNOPSIS
-  Emails the weekly reminder to run the local sources from a home connection. Run from the repo root.
+  Emails the weekly reminder to run the local sources from a home connection, on its own. Run from
+  the repo root.
 .DESCRIPTION
   Some sites turn away or time out on GitHub's servers but load from a home connection. Those
   sources are marked local in sources.json; the nightly ingest skips them and keeps their last
-  fetch. The scheduled ingest at midnight Sunday, city time, calls this script, which emails
-  REPORT_EMAIL a reminder with each local source's last fetch and how to run
-  Invoke-LocalIngest.ps1. Any other run, or a week with no local sources, sends nothing.
+  fetch. The reminder lists each local source's last fetch and how to run Invoke-LocalIngest.ps1.
+  No workflow calls this script any more: the Sunday nightly email (Send-Report.ps1 -Kind
+  nightly) carries the reminder as a section. It is kept to preview or send the reminder alone,
+  with -Force. Without -Force, anything but the scheduled Sunday run sends nothing.
 
   Like Send-Report.ps1, the address and key come from environment variables (repository
   secrets), so the address stays out of this public repo.
