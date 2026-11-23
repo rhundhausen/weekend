@@ -204,8 +204,12 @@ Pester tests and the Worker's tests on every push and pull request.
 - **Deploying:** Cloudflare Workers Builds is connected to each city repo, with `website/` as its
   root. The city's `wrangler.jsonc` build command clones this repo's `main` and runs
   `website/build.sh`, and the build output in `website/public` is deployed. Every push to the city's
-  `main` deploys, including refine's data commit; a core push reaches the site at the city's
-  next build. Cloudflare skips any commit whose message contains `[skip ci]`, so leave it out of
+  `main` deploys, including refine's data commit. A core push that changes `website/`,
+  `hugo.toml`, or `ingestion/vocabulary/` runs the core's deploy-sites workflow, which uses
+  Cloudflare's API to start a build of `main` for every Worker connected to a city repo, so every
+  site rebuilds with it a few minutes later (Actions > deploy-sites > Run workflow does the same by
+  hand). A new city's Worker is found by itself once it is connected to its repo. Other core
+  changes reach the site at the city's next build. Cloudflare skips any commit whose message contains `[skip ci]`, so leave it out of
   commits that should reach the site.
 - **Local sources:** some sites turn away or time out on GitHub's servers (which run in Azure) but
   load from a home connection. Their entries in `sources.json` have `local: true`. The nightly

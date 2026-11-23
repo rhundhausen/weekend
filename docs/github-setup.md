@@ -64,6 +64,10 @@ also covers cities added later. The sender, `<siteName> Reports <reports@<domain
    (`npx wrangler d1 create <logDatabase>` or the dashboard) and put its id in `wrangler.jsonc`
    (website/README.md, "Visitor log").
 3. Add the city's domain to the Worker (Settings > Domains & Routes).
+4. Nothing more is needed for core website changes to reach the site: the core's deploy-sites
+   workflow finds every Worker connected to a city repo. It uses two secrets of the core repo, set
+   once for all cities: a user-scoped Cloudflare API token (My Profile > API Tokens, with Workers
+   Builds Configuration Edit and Workers Scripts Read) and the account id.
 
 ## 5. The first run
 

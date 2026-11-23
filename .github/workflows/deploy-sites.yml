@@ -1,0 +1,101 @@
+# Rebuilds every city's site when the core's website changes, so a layout, style, or script change
+# goes live without waiting for a city's nightly refine commit.
+#
+# Each city's Cloudflare Worker builds from its city repo (Workers Builds), and its build command
+# clones this repo's main, so a new build of the city's main picks up this push. The workflow asks
+# Cloudflare's API for every Worker whose build trigger is connected to a city repo (a repo named
+# weekend<city>, such as weekendboise) and starts a build of main for each. A new city needs nothing
+# here: once its Worker is connected to its repo, the next run finds it.
+#
+# Secrets: a user-scoped Cloudflare API token (Workers Builds Configuration Edit, Workers Scripts
+# Read) and the account id. Also runs by hand: Actions > deploy-sites > Run workflow, where
+# "Only list" shows what it finds without starting builds.
+
+name: deploy-sites
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - 'hugo.toml'
+      - 'ingestion/vocabulary/**'
+      - '.github/workflows/deploy-sites.yml'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Only list the city Workers and their triggers; start no builds
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: deploy-sites
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
+      API: https://api.cloudflare.com/client/v4
+    steps:
+      - name: Start a build of main for every city Worker
+        run: |
+          set -euo pipefail
+          if [ -z "$CF_TOKEN" ] || [ -z "$CF_ACCOUNT" ]; then
+            echo "::error::The Cloudflare API token or account id secret is missing."
+            exit 1
+          fi
+          cf() {
+            # GET or POST to the API; prints the body, fails on HTTP errors or success false.
+            local method="$1" path="$2" body="${3:-}"
+            local out
+            if [ -n "$body" ]; then
+              out="$(curl -sS --max-time 30 -X "$method" -H "Authorization: Bearer $CF_TOKEN" \
+                -H 'Content-Type: application/json' --data "$body" "$API/accounts/$CF_ACCOUNT$path")"
+            else
+              out="$(curl -sS --max-time 30 -X "$method" -H "Authorization: Bearer $CF_TOKEN" \
+                "$API/accounts/$CF_ACCOUNT$path")"
+            fi
+            if [ "$(echo "$out" | jq -r '.success // false')" != "true" ]; then
+              echo "::error::$method $path failed: $(echo "$out" | jq -c '.errors // .')" >&2
+              return 1
+            fi
+            echo "$out"
+          }
+
+          scripts="$(cf GET /workers/scripts)"
+          started=0
+          failed=0
+          while IFS=$'\t' read -r name tag; do
+            [ -n "$tag" ] || continue
+            triggers="$(cf GET "/builds/workers/$tag/triggers")" || { failed=$((failed + 1)); continue; }
+            # A city trigger names a city repo (weekend<city>, not the core repo weekend).
+            city="$(echo "$triggers" | jq -c '[.result[]? | select([.. | strings | select(test("^(rhundhausen/)?weekend[a-z0-9-]+$"))] | length > 0)]')"
+            [ "$(echo "$city" | jq 'length')" -gt 0 ] || continue
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "Worker $name: $(echo "$city" | jq 'length') city trigger(s)"
+              # Field names only, plus the ones that identify the trigger (no build variables).
+              echo "$city" | jq -c '.[] | {keys: keys, trigger_uuid, trigger_name, branch_includes, branch_excludes, repo: ([.. | strings | select(test("^(rhundhausen/)?weekend"))] | unique)}'
+              continue
+            fi
+            # Prefer the trigger that builds main; Cloudflare's production trigger lists it.
+            uuid="$(echo "$city" | jq -r 'first((.[] | select([.. | strings | select(. == "main")] | length > 0)), .[0]) | .trigger_uuid')"
+            if out="$(cf POST "/builds/triggers/$uuid/builds" '{"branch":"main"}')"; then
+              echo "Worker $name: build $(echo "$out" | jq -r '.result.build_uuid // "?"') started"
+              started=$((started + 1))
+            else
+              failed=$((failed + 1))
+            fi
+          done < <(echo "$scripts" | jq -r '.result[] | [.id, .tag] | @tsv')
+
+          if [ "$DRY_RUN" != "true" ]; then
+            echo "Started $started build(s), $failed failed."
+            [ "$started" -gt 0 ] || { echo "::error::No city Worker was rebuilt."; exit 1; }
+          fi
+          [ "$failed" -eq 0 ]
