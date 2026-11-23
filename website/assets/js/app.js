@@ -660,10 +660,11 @@ document.addEventListener('keydown', (ev) => {
 const asOf = document.getElementById('as-of');
 if (asOf && cfg.lastIngest) {
   const when = new Date(cfg.lastIngest);
-  if (!Number.isNaN(when.getTime())) {
-    asOf.textContent = new Intl.DateTimeFormat('en-US', {
-      timeZone: TZ, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
-    }).format(when);
+  const date = asOf.querySelector('.as-of-date');
+  const time = asOf.querySelector('.as-of-time');
+  if (!Number.isNaN(when.getTime()) && date && time) {
+    date.textContent = new Intl.DateTimeFormat('en-US', { timeZone: TZ, month: 'short', day: 'numeric' }).format(when);
+    time.textContent = new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' }).format(when);
   }
 }
 

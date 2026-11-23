@@ -656,6 +656,8 @@ input:focus-visible, select:focus-visible, button:focus-visible {
 
 /* Phones: each row becomes a compact card. */
 @media (max-width: 760px) {
+  /* "Updated Nov 23" instead of "Updated: Nov 23, 12:00 AM". */
+  .as-of-wide { display: none; }
   .field.search { flex-basis: 100%; }
   .field { flex: 1 1 140px; }
   .field.date { flex: 1 1 130px; }

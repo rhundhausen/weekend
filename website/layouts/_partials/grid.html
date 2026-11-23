@@ -129,7 +129,8 @@
       <span class="sep" aria-hidden="true">|</span> <a href="{{ relURL "sources/" }}">{{ len $running }} sources</a>
       {{- /* In the city's time, as app.js writes it, so the text does not change after the page draws. */}}
       {{- $local := (time.AsTime "2000-01-01T00:00:00" $city.timeZone).Location }}
-      {{- with $lastIngest }} <span class="sep" aria-hidden="true">|</span> <time id="as-of" datetime="{{ . }}">{{ ((time.AsTime .).In $local).Format "Jan 2, 3:04 PM" }}</time>{{ end }}
+      {{- /* Phones show "Updated Nov 23"; site.css hides the colon and the time there. */}}
+      {{- with $lastIngest }}{{ $at := (time.AsTime .).In $local }} <span class="sep" aria-hidden="true">|</span> Updated<span class="as-of-wide">:</span> <time id="as-of" datetime="{{ . }}"><span class="as-of-date">{{ $at.Format "Jan 2" }}</span><span class="as-of-wide">, <span class="as-of-time">{{ $at.Format "3:04 PM" }}</span></span></time>{{ end }}
     </p>
   </div>
 </header>
