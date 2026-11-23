@@ -173,7 +173,9 @@ a { color: var(--accent); }
   background-repeat: repeat-x, no-repeat;
   color: var(--header-text);
   border-bottom: 1px solid var(--border);
-  padding: 22px 0 22px;
+  /* 4px less on top than below, which the .sub margin takes back, so the title line sits higher
+     and further from the counts while the header keeps its height. */
+  padding: 18px 0 22px;
 }
 /* The icon's sky, as a thin stripe along the top edge. */
 .top::before {
@@ -224,7 +226,7 @@ a { color: var(--accent); }
 }
 .top-chip:hover { color: var(--header-link); border-color: var(--header-link); }
 .sub {
-  margin: 2px 0 0;
+  margin: 6px 0 0;
   color: var(--header-muted);
   font-size: 13px;
 }
