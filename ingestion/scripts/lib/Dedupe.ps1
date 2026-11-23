@@ -162,6 +162,115 @@ function Test-WkPlaceholderVenue {
   $v -match "(?i)^[a-z .']+,\s*(?:$(Get-WkStatePattern))\b[\s\d-]*$"
 }
 
+$script:PaidTiers = @('$', '$$', '$$$')
+
+function Get-WkEventDay {
+  # The YYYY-MM-DD part of a start or end, in the event's own offset.
+  param([AllowEmptyString()][string]$Value)
+  if ($Value.Length -ge 10) { $Value.Substring(0, 10) } else { '' }
+}
+
+function Set-WkPaidTier {
+  # Gives a free or unpriced event the paid tier, as a copy, so the caller's event is untouched.
+  param([object]$Event, [string]$Tier)
+  $copy = $Event | Select-Object *
+  $copy.sources = @($Event.sources)
+  $copy | Add-Member -NotePropertyName costTier -NotePropertyValue $Tier -Force
+  $copy
+}
+
+function Remove-WkCoveredSpans {
+  <#
+  .SYNOPSIS
+    Drops a multi-day listing when single-day listings of the same show cover it.
+  .DESCRIPTION
+    A multi-day event is dropped when the same known city (not Other) has single-day events with a
+    similar title (Jaro-Winkler above 0.9, ignoring a year) at the same venueKey, or with either venue
+    a placeholder, on both its first and its last day. A placeholder range with no city yet (Other)
+    can be covered by nights in any one known city. Sources list a run both ways ("TRICA's Snow Globe" from
+    Dec 4 to Dec 13, and each of its six nights), and the nights are the accurate version: the range
+    hides that it skips Monday to Thursday. A range covered only in the middle, such as two special
+    nights of a month-long light show, is kept. The dropped range's price tier goes to nights that
+    have none, or that say free when the range is paid.
+  #>
+  [CmdletBinding()]
+  param([Parameter(Mandatory, Position = 0)][AllowEmptyCollection()][object[]]$Events)
+
+  # Single-day events in known cities by the first four letters of the title, to keep comparisons
+  # few. A year in the title is ignored, so "2026 Festival of Trees" covers "Festival of Trees".
+  $singles = @{}
+  $index = 0
+  $infos = foreach ($event in $Events) {
+    $title = ((Get-WkMatchTitle $event.title) -replace '\b(?:19|20)\d\d\b', ' ' -replace '\s+', ' ').Trim()
+    $startDay = Get-WkEventDay $event.start
+    $endDay = Get-WkEventDay $event.end
+    $info = [pscustomobject]@{ Index = $index++; Event = $event; Title = $title; StartDay = $startDay; EndDay = $endDay; Multi = ($endDay -and $endDay -gt $startDay) }
+    if (-not $info.Multi -and $event.city -and $event.city -ne 'Other' -and $title) {
+      $key = $title.Substring(0, [Math]::Min(4, $title.Length))
+      if (-not $singles.ContainsKey($key)) { $singles[$key] = [Collections.Generic.List[object]]::new() }
+      $singles[$key].Add($info)
+    }
+    $info
+  }
+
+  $dropped = [Collections.Generic.HashSet[int]]::new()
+  $tiers = @{}
+  foreach ($span in @($infos | Where-Object { $_.Multi -and $_.Event.city -and $_.Title })) {
+    $event = $span.Event
+    $spanPlaceholder = Test-WkPlaceholderVenue $event.venue $event.city
+    # A placeholder listing ("Various Treasure Valley locations") often has no city yet: it can
+    # match nights in any one known city. Otherwise the city must be known and the same.
+    $anyCity = $event.city -eq 'Other'
+    if ($anyCity -and -not $spanPlaceholder) { continue }
+    $covered = @($singles[$span.Title.Substring(0, [Math]::Min(4, $span.Title.Length))] | Where-Object {
+        $_ -and ($anyCity -or $_.Event.city -eq $event.city) -and
+        $_.StartDay -ge $span.StartDay -and $_.StartDay -le $span.EndDay -and
+        ($_.Event.venueKey -eq $event.venueKey -or $spanPlaceholder -or (Test-WkPlaceholderVenue $_.Event.venue $_.Event.city)) -and
+        (Get-JaroWinkler $span.Title $_.Title) -gt 0.9
+      })
+    if (@($covered.Event.city | Select-Object -Unique).Count -gt 1) { continue }
+    $days = @($covered.StartDay)
+    if (-not ($days -contains $span.StartDay -and $days -contains $span.EndDay)) { continue }
+    Write-Verbose "Dropped '$($event.title)' $($span.StartDay) to $($span.EndDay) at $($event.venue): its $(@($days | Select-Object -Unique).Count) days are listed one by one"
+    $null = $dropped.Add($span.Index)
+    if ($event.costTier) {
+      foreach ($single in $covered) {
+        if (-not $single.Event.costTier -or ($single.Event.costTier -eq 'free' -and $event.costTier -ne 'free')) {
+          $tiers[$single.Index] = $event.costTier
+        }
+      }
+    }
+  }
+
+  foreach ($info in $infos) {
+    if ($dropped.Contains($info.Index)) { continue }
+    if ($tiers.ContainsKey($info.Index)) { Set-WkPaidTier $info.Event $tiers[$info.Index] } else { $info.Event }
+  }
+}
+
+function Sync-WkSeriesTiers {
+  <#
+  .SYNOPSIS
+    Keeps one show from reading free on some dates and paid on others.
+  .DESCRIPTION
+    Events with the same normalized title, venueKey, and city form a series. When some say free and
+    others give a paid tier, the free ones take the lowest paid tier: "Free" usually comes from the
+    low end of a range like "Free - $20" that only covers small children. Changes the events in place
+    (Merge-WkEvents passes its own copies).
+  #>
+  [CmdletBinding()]
+  param([Parameter(Mandatory, Position = 0)][AllowEmptyCollection()][object[]]$Events)
+
+  foreach ($series in ($Events | Group-Object { "$($_.city)|$($_.venueKey)|$(Get-WkMatchTitle $_.title)" })) {
+    $paid = @($series.Group.costTier | Where-Object { $_ -in $script:PaidTiers } | Sort-Object { $script:PaidTiers.IndexOf($_) })
+    if (-not $paid -or -not @($series.Group | Where-Object costTier -eq 'free')) { continue }
+    Write-Verbose "Priced '$($series.Group[0].title)' at $($series.Group[0].venue) $($paid[0]) on every date, not free on some"
+    foreach ($event in @($series.Group | Where-Object costTier -eq 'free')) {
+      $event | Add-Member -NotePropertyName costTier -NotePropertyValue $paid[0] -Force
+    }
+  }
+}
+
 function Merge-WkEvents {
   <#
   .SYNOPSIS
@@ -189,6 +298,9 @@ function Merge-WkEvents {
     The best-priority event's venue is kept, unless it is a placeholder (the bare city, "Boise, ID
     83703", or "Various ..."), when the other event's venue replaces it.
     A "canceled" marker in a title is ignored for matching, so a cancellation finds its listing.
+    Before matching, a multi-day listing whose first and last days are also listed one by one is
+    dropped (Remove-WkCoveredSpans). After it, one show at one venue never reads free on some dates
+    and paid on others (Sync-WkSeriesTiers).
 
     The event from the best-priority source supplies the url and other fields (between sources
     of equal priority, the one earlier in the input; refine passes them in sources.json order), the longest
@@ -210,7 +322,7 @@ function Merge-WkEvents {
     [switch]$DropCanceled
   )
 
-  $ordered = $Events |
+  $ordered = @(Remove-WkCoveredSpans $Events) |
     Select-Object @{ n = 'Event'; e = { $_ } }, @{ n = 'Rank'; e = { Get-WkEventRank $_ $Priorities } }, @{ n = 'Instant'; e = { Get-WkEventInstant $_.start } } |
     Sort-Object Rank, Instant, @{ e = { $_.Event.id } } -Stable
 
@@ -344,5 +456,7 @@ function Merge-WkEvents {
     }
   }
 
-  $kept | Where-Object { -not ($DropCanceled -and $_.Canceled) } | ForEach-Object { $_.Event }
+  $events = @($kept | Where-Object { -not ($DropCanceled -and $_.Canceled) } | ForEach-Object { $_.Event })
+  Sync-WkSeriesTiers $events
+  $events
 }

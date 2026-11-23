@@ -428,3 +428,79 @@ Describe 'Merge-WkEvents canceled events' {
     $merged.Count | Should -Be 0
   }
 }
+Describe 'Merge-WkEvents covered ranges' {
+  BeforeAll {
+    # A show listed as one range and as each of its nights, like TRICA's Snow Globe.
+    function New-Night {
+      param([string]$Day, [string]$Tier, [string]$Source = 'mom', [string]$Title = 'TRICA Snow Globe', [string]$Venue = 'TRICA', [string]$City = 'Boise')
+      $event = New-TestEvent -Title $Title -Start "$($Day)T16:00:00-07:00" -End "$($Day)T19:00:00-07:00" -Venue $Venue -City $City -Source $Source -Url "https://$Source.test/$Day"
+      if ($Tier) { $event | Add-Member -NotePropertyName costTier -NotePropertyValue $Tier -Force }
+      $event
+    }
+    function New-Range {
+      param([string]$First, [string]$Last, [string]$Tier, [string]$Source = 'mom', [string]$Title = "TRICA's Snow Globe", [string]$Venue = 'TRICA', [string]$City = 'Boise')
+      $event = New-TestEvent -Title $Title -Start "$($First)T16:00:00-07:00" -End "$($Last)T18:00:00-07:00" -Venue $Venue -City $City -Source $Source -Url "https://$Source.test/range"
+      if ($Tier) { $event | Add-Member -NotePropertyName costTier -NotePropertyValue $Tier -Force }
+      $event
+    }
+    $script:Nights = '2026-12-04', '2026-12-05', '2026-12-06', '2026-12-11', '2026-12-12', '2026-12-13'
+  }
+
+  It 'keeps the nights and drops the ranges that cover them, giving the nights the paid tier' {
+    $events = @($Nights | ForEach-Object { New-Night $_ -Tier free }) +
+    @((New-Range '2026-12-04' '2026-12-13' -Tier '$$'), (New-Range '2026-12-04' '2026-12-06' -Tier free -Source broker -Title 'TRICA Snow Globe' -Venue 'Various Treasure Valley locations' -City 'Other'))
+    $merged = @(Merge-WkEvents $events)
+    $merged.Count | Should -Be 6
+    @($merged | ForEach-Object { $_.start.Substring(0, 10) }) | Should -Be $Nights
+    @($merged.costTier | Select-Object -Unique) | Should -Be @('$$')
+  }
+
+  It 'does not change the events it was given' {
+    $night = New-Night '2026-12-04' -Tier free
+    $null = Merge-WkEvents @($night, (New-Night '2026-12-13' -Tier free), (New-Range '2026-12-04' '2026-12-13' -Tier '$$'))
+    $night.costTier | Should -Be 'free'
+  }
+
+  It 'ignores a year in the range title' {
+    $merged = @(Merge-WkEvents @((New-Night '2026-12-04'), (New-Night '2026-12-05'), (New-Range '2026-12-04' '2026-12-05' -Title '2026 TRICA Snow Globe')))
+    $merged.Count | Should -Be 2
+  }
+
+  It 'keeps a range when only nights in the middle are listed' {
+    $merged = @(Merge-WkEvents @((New-Range '2026-12-01' '2026-12-31' -Title 'Winter Garden aGlow' -Venue 'Idaho Botanical Garden'),
+        (New-Night '2026-12-10' -Title 'Winter Garden aGlow' -Venue 'Idaho Botanical Garden'), (New-Night '2026-12-11' -Title 'Winter Garden aGlow' -Venue 'Idaho Botanical Garden')))
+    $merged.Count | Should -Be 3
+  }
+
+  It 'keeps a range when the nights are at another named venue or in another city' {
+    @(Merge-WkEvents @((New-Night '2026-12-04'), (New-Night '2026-12-06'), (New-Range '2026-12-04' '2026-12-06' -Venue 'Egyptian Theatre'))).Count | Should -Be 3
+    @(Merge-WkEvents @((New-Night '2026-12-04'), (New-Night '2026-12-06'), (New-Range '2026-12-04' '2026-12-06' -Venue 'Various locations' -City 'Nampa'))).Count | Should -Be 3
+  }
+
+  It 'keeps a range when its title differs' {
+    @(Merge-WkEvents @((New-Night '2026-12-04'), (New-Night '2026-12-06'), (New-Range '2026-12-04' '2026-12-06' -Title 'Holiday Bazaar'))).Count | Should -Be 3
+  }
+}
+
+Describe 'Merge-WkEvents series price' {
+  BeforeAll {
+    function New-Show {
+      param([string]$Day, [string]$Tier, [string]$Venue = 'TRICA', [string]$Title = 'TRICA Snow Globe')
+      $event = New-TestEvent -Title $Title -Start "$($Day)T16:00:00-07:00" -Venue $Venue -Source mom -Url "https://mom.test/$Day"
+      if ($Tier) { $event | Add-Member -NotePropertyName costTier -NotePropertyValue $Tier -Force }
+      $event
+    }
+  }
+
+  It 'never shows one show as free on some dates and paid on others' {
+    $merged = @(Merge-WkEvents @((New-Show '2026-12-04' -Tier free), (New-Show '2026-12-05' -Tier '$$$'), (New-Show '2026-12-06' -Tier '$$'), (New-Show '2026-12-07')))
+    @($merged.costTier | Where-Object { $_ }) | Should -Be @('$$', '$$$', '$$')
+    @($merged | Where-Object { -not $_.costTier }).Count | Should -Be 1
+  }
+
+  It 'leaves a show that is free on every date, and different shows or venues, alone' {
+    @((Merge-WkEvents @((New-Show '2026-12-04' -Tier free), (New-Show '2026-12-05' -Tier free))).costTier) | Should -Be @('free', 'free')
+    @((Merge-WkEvents @((New-Show '2026-12-04' -Tier free), (New-Show '2026-12-05' -Tier '$$' -Venue 'Egyptian Theatre'))).costTier) | Should -Be @('free', '$$')
+    @((Merge-WkEvents @((New-Show '2026-12-04' -Tier free), (New-Show '2026-12-05' -Tier '$$' -Title 'Paint with Santa'))).costTier) | Should -Be @('free', '$$')
+  }
+}
