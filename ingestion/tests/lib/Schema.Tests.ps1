@@ -299,3 +299,47 @@ Describe 'Test-WkEvent' {
     Test-WkEvent $event | Should -BeFalse
   }
 }
+
+Describe 'New-WkEvent location' {
+  It 'keeps the coordinates and address a source sends' {
+    $event = New-TestEvent @{ Latitude = 43.6033; Longitude = -116.2012; Address = '2201 W Cesar Chavez Ln,  Boise, ID 83725 ' }
+    $event.location.lat | Should -Be 43.6033
+    $event.location.lon | Should -Be -116.2012
+    $event.location.address | Should -Be '2201 W Cesar Chavez Ln, Boise, ID 83725'
+    Test-WkEvent $event | Should -BeTrue
+  }
+
+  It 'drops coordinates far from the city' {
+    $event = New-TestEvent @{ Latitude = 47.61; Longitude = -122.33 }
+    $event.PSObject.Properties.Name | Should -Not -Contain 'location'
+  }
+
+  It 'keeps the address when the coordinates are dropped' {
+    $event = New-TestEvent @{ Latitude = 47.61; Longitude = -122.33; Address = '1 Main St, Boise, ID 83702' }
+    $event.location.Keys | Should -Be @('address')
+  }
+
+  It 'drops a coordinate without its pair' {
+    $event = New-TestEvent @{ Latitude = 43.6 }
+    $event.PSObject.Properties.Name | Should -Not -Contain 'location'
+  }
+
+  It 'drops an address too long to be one' {
+    $event = New-TestEvent @{ Address = ('x' * 201) }
+    $event.PSObject.Properties.Name | Should -Not -Contain 'location'
+  }
+
+  It 'adds no location when the source sends none' {
+    (New-TestEvent).PSObject.Properties.Name | Should -Not -Contain 'location'
+  }
+}
+
+Describe 'Test-WkNearCity' {
+  It 'accepts a point in the metro' {
+    Test-WkNearCity -Latitude 43.6 -Longitude -116.2 | Should -BeTrue
+  }
+
+  It 'rejects a point about 290 miles away' {
+    Test-WkNearCity -Latitude 40.76 -Longitude -111.89 | Should -BeFalse
+  }
+}

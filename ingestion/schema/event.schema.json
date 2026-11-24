@@ -68,6 +68,16 @@
       "$comment": "See docs/cost-tiers.md. Breakpoints live in $CostTierBreakpoints in ingestion/scripts/lib/Cost.ps1.",
       "enum": ["free", "$", "$$", "$$$"]
     },
+    "location": {
+      "type": "object",
+      "description": "Raw events only: the venue's coordinates and address as the source reports them. Refine moves them to data/venue-locations.json and removes this field.",
+      "additionalProperties": false,
+      "properties": {
+        "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+        "lon": { "type": "number", "minimum": -180, "maximum": 180 },
+        "address": { "type": "string", "minLength": 1, "maxLength": 200 }
+      }
+    },
     "url": {
       "type": "string",
       "description": "Canonical event page.",

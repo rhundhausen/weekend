@@ -395,6 +395,28 @@ function ConvertTo-WkTitleCase {
   $out.ToString()
 }
 
+function Test-WkNearCity {
+  <#
+  .SYNOPSIS
+    True when a point is within 150 miles of the city's coordinates (city.json), the box that
+    source coordinates, venue lookups, and the map's visitor position must fall in.
+  #>
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory)][double]$Latitude,
+    [Parameter(Mandatory)][double]$Longitude
+  )
+
+  $center = (Get-WkCity).coordinates
+  $rad = [Math]::PI / 180
+  $dLat = ($Latitude - $center.lat) * $rad
+  $dLon = ($Longitude - $center.lon) * $rad
+  $a = [Math]::Pow([Math]::Sin($dLat / 2), 2) +
+    [Math]::Cos($center.lat * $rad) * [Math]::Cos($Latitude * $rad) * [Math]::Pow([Math]::Sin($dLon / 2), 2)
+  $miles = 2 * 3958.8 * [Math]::Asin([Math]::Min([double]1, [Math]::Sqrt($a)))
+  $miles -le 150
+}
+
 function New-WkEvent {
   <#
   .SYNOPSIS
@@ -413,6 +435,12 @@ function New-WkEvent {
     The cheapest adult ticket from the source's own price data, in dollars (docs/cost-tiers.md).
     Without it, a free-admission tag means 0, and otherwise the description's price text is read.
     costTier is derived from it with Get-CostTier; the price itself is never stored.
+  .PARAMETER Latitude
+    The venue's coordinates as the source reports them, with -Longitude. Kept as location.lat and
+    location.lon only when both are given and the point is near the city (Test-WkNearCity).
+    Refine moves them to data/venue-locations.json; data/events.json never has them.
+  .PARAMETER Address
+    The venue's address as one line, "street, town, ST ZIP". Kept as location.address.
   #>
   [CmdletBinding()]
   param(
@@ -429,7 +457,10 @@ function New-WkEvent {
     [Parameter(Mandatory)][string]$Url,
     [string]$Description,
     [object[]]$Sources = @(),
-    [AllowNull()][Nullable[decimal]]$PriceMin
+    [AllowNull()][Nullable[decimal]]$PriceMin,
+    [AllowNull()][Nullable[double]]$Latitude,
+    [AllowNull()][Nullable[double]]$Longitude,
+    [string]$Address
   )
 
   $cleanTitle = ConvertTo-WkTitleCase (($Title -replace '\s+', ' ').Trim())
@@ -490,6 +521,15 @@ function New-WkEvent {
     $text = $text.Substring(0, $cut).TrimEnd() + '...'
   }
   if ($text) { $event.description = $text }
+
+  $location = [ordered]@{}
+  if ($null -ne $Latitude -and $null -ne $Longitude -and (Test-WkNearCity -Latitude $Latitude -Longitude $Longitude)) {
+    $location.lat = $Latitude
+    $location.lon = $Longitude
+  }
+  $Address = ($Address -replace '\s+', ' ').Trim()
+  if ($Address -and $Address.Length -le 200) { $location.address = $Address }
+  if ($location.Count) { $event.location = $location }
 
   $event.sources = @($Sources | ForEach-Object {
       [pscustomobject][ordered]@{ name = $_.name; url = $_.url; fetchedAt = $_.fetchedAt }
