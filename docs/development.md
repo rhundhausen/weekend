@@ -147,10 +147,15 @@ Refine keeps where each venue is in `data/venue-locations.json`, for the site's 
   town's center (`cityCenters` in `city.json`).
 - **Placeholders:** a venue that isn't one place is never looked up: a `various-` or `-area` key, or
   a venue whose events are in more than one town, such as an auction company. Each of its events
-  goes to its own town's center, so estate sales never point at a home.
-- **Politeness:** 1 second between Nominatim requests, the bot's User-Agent, and at most
-  `-VenueLookups` (default 200) requests per run, so a first fill may take two nights. A venue not
-  found is tried again after 30 days; a found one is kept.
+  goes to its own town's center, so estate sales never point at a home. A point a source sent
+  wins over the town rule, since sources disagree about towns more than about points, and a venue
+  whose events settle in one town again is looked up.
+- **Politeness:** 1 second between Nominatim requests, the bot's User-Agent, at most
+  `-VenueLookups` (default 200) requests and `-VenueBudgetSeconds` (default 300) per run, and a
+  stop after three failed requests in a row, so a first fill may take two nights and a slow
+  service never costs the night's refine. A venue not found is tried again after 30 days; a found
+  one is kept. An answer that is a whole town, county, or ZIP code doesn't count, so "Downtown
+  Boise" isn't placed as if it were one spot.
 - **Skipping it:** `-SkipVenueLookup` makes no requests but still records what sources sent.
 
 ### Link check

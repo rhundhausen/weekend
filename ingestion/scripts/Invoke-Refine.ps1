@@ -43,6 +43,9 @@
   apply. -NoWrite implies it.
 .PARAMETER VenueLookups
   The most venue lookup requests one run may make. Venues left over wait for a later run.
+.PARAMETER VenueBudgetSeconds
+  How long the venue lookup may spend. It also stops after three failed requests in a row, so a
+  slow or down lookup service costs a few minutes, never the night's refine.
 .PARAMETER CityBudgetSeconds
   How long the city lookup may spend making requests. Pages left over wait for a later run.
 .PARAMETER NoWrite
@@ -68,6 +71,7 @@ param(
   [switch]$SkipCityLookup,
   [switch]$SkipVenueLookup,
   [int]$VenueLookups = 200,
+  [int]$VenueBudgetSeconds = 300,
   [switch]$NoWrite,
   [string]$OutDir = './out',
   [int]$Days = 180,
@@ -180,7 +184,7 @@ $lookup = try {
 $venueState = Read-WkVenueLocationState $venueLocationsPath
 $venueMax = if ($SkipVenueLookup -or $NoWrite) { 0 } else { $VenueLookups }
 $venues = try {
-  Update-WkVenueLocations -RawEvents $rawLocations -Events $upcoming -State $venueState -Now $Now -MaxLookups $venueMax
+  Update-WkVenueLocations -RawEvents $rawLocations -Events $upcoming -State $venueState -Now $Now -MaxLookups $venueMax -BudgetSeconds $VenueBudgetSeconds
 } catch {
   Write-Warning "Venue lookup failed, venues keep their stored locations: $_"
   @{ State = $venueState; Looked = 0; Found = 0; Feed = 0 }

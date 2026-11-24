@@ -45,14 +45,18 @@ function Update-WkVenueLocations {
     Brings the venue location state up to date for the venues of -Events. Returns the state and
     counts (Looked: venues looked up, Found: of those, found; Feed: entries set from sources).
   .DESCRIPTION
-    A manual entry is never changed. A placeholder venue (Get-WkPlaceholderVenues) is marked so
-    and never looked up. A venue a raw event has coordinates for takes the point reported most
-    often, ties going to the first reported. Any other venue with no entry, or a none entry
-    checked 30 days ago or more, is looked up: by the source's address when there is one, else by
-    "venue, town, state". An answer must fall within 150 miles of the city (Test-WkNearCity).
-    With no answer, an address's ZIP code is looked up. Requests are at least MinDelaySeconds
-    apart and at most MaxLookups per run; a failed request warns and leaves the entry as it was.
-    Entries of venues with no events now are kept, since venues come back.
+    A manual entry is never changed. A venue a raw event has coordinates for takes the point
+    reported most often, ties going to the first reported, and keeps a feed point it has even when
+    its events name two towns (sources disagree about towns more than about points). Otherwise a
+    placeholder venue (Get-WkPlaceholderVenues) is marked so and never looked up; once it no
+    longer is one, it is looked up again. Any other venue with no entry, or a none entry checked
+    30 days ago or more, is looked up: by the source's address when there is one, else by
+    "venue, town, state". An answer must fall within 150 miles of the city (Test-WkNearCity) and
+    be a place, not a whole town, county, or ZIP code. With no answer, an address's ZIP code is
+    looked up. Requests are at least MinDelaySeconds apart, at most MaxLookups per run, and
+    stop when BudgetSeconds have passed or after three failures in a row; a failed request warns
+    and leaves the entry as it was. Entries of venues with no events now are kept, since venues
+    come back.
   .PARAMETER RawEvents
     The raw events, whose location field holds what sources sent.
   .PARAMETER State
@@ -67,8 +71,9 @@ function Update-WkVenueLocations {
     [Parameter(Mandatory)][hashtable]$State,
     [Parameter(Mandatory)][DateTimeOffset]$Now,
     [int]$MaxLookups = 300,
+    [int]$BudgetSeconds = 300,
     [double]$MinDelaySeconds = 1,
-    [scriptblock]$Fetch = { param([string]$Url) Invoke-WkRequest $Url }
+    [scriptblock]$Fetch = { param([string]$Url) Invoke-WkRequest $Url -TimeoutSec 10 }
   )
 
   $invariant = [Globalization.CultureInfo]::InvariantCulture
@@ -76,7 +81,9 @@ function Update-WkVenueLocations {
   $retryBefore = $Now.UtcDateTime.AddDays(-30).ToString('yyyy-MM-dd', $invariant)
   $counts = @{ Looked = 0; Found = 0; Feed = 0 }
   # Requests so far and when the last one ended, shared with $ask.
-  $clock = @{ requests = 0; last = $null }
+  $clock = @{ requests = 0; last = $null; failures = 0 }
+  $timer = [Diagnostics.Stopwatch]::StartNew()
+  $spent = { $clock.requests -ge $MaxLookups -or $timer.Elapsed.TotalSeconds -ge $BudgetSeconds -or $clock.failures -ge 3 }
 
   # What sources sent, by venue: each point with how often it was reported, and the first address.
   $points = @{}
@@ -105,8 +112,11 @@ function Update-WkVenueLocations {
   $stateName = (Get-WkCity).state.name
   $box = Get-WkNominatimBox
 
+  # A town, county, or ZIP code is where a venue is, not the venue: a lookup of "Downtown Boise"
+  # answers with Boise itself.
+  $areaTypes = @('city', 'town', 'village', 'hamlet', 'municipality', 'county', 'state', 'region', 'postcode', 'country')
   $ask = {
-    param([string]$Query)
+    param([string]$Query, [switch]$Area)
     if ($null -ne $clock.last) {
       $wait = $MinDelaySeconds - ([DateTime]::UtcNow - $clock.last).TotalSeconds
       if ($wait -gt 0) { Start-Sleep -Milliseconds ([int]($wait * 1000)) }
@@ -118,6 +128,7 @@ function Update-WkVenueLocations {
       $clock.last = [DateTime]::UtcNow
     }
     foreach ($place in $answer) {
+      if (-not $Area -and "$($place.addresstype)" -in $areaTypes) { continue }
       $lat = ConvertTo-WkCoordinate $place.lat
       $lon = ConvertTo-WkCoordinate $place.lon
       if ($null -ne $lat -and $null -ne $lon -and (Test-WkNearCity -Latitude $lat -Longitude $lon)) { return @($lat, $lon) }
@@ -129,7 +140,8 @@ function Update-WkVenueLocations {
     $entry = $State[$key]
     if ($entry -and $entry.from -eq 'manual') { continue }
 
-    if ($key -in $placeholders) {
+    $named = $key -like 'various-*' -or $key -like '*-area'
+    if ($named -or ($key -in $placeholders -and -not $points.ContainsKey($key) -and -not ($entry -and $entry.from -eq 'feed'))) {
       if (-not $entry -or $entry.from -ne 'placeholder') { $State[$key] = [ordered]@{ from = 'placeholder'; checked = $today } }
       continue
     }
@@ -152,8 +164,8 @@ function Update-WkVenueLocations {
       continue
     }
 
-    $due = -not $entry -or ($entry.from -eq 'none' -and "$($entry.checked)" -le $retryBefore)
-    if (-not $due -or $clock.requests -ge $MaxLookups) { continue }
+    $due = -not $entry -or $entry.from -eq 'placeholder' -or ($entry.from -eq 'none' -and "$($entry.checked)" -le $retryBefore)
+    if (-not $due -or (& $spent)) { continue }
 
     $address = $addresses[$key]
     $town = @($towns[$key].cities.GetEnumerator() | Sort-Object -Property @{ Expression = 'Value'; Descending = $true }, Name | Select-Object -First 1).Name
@@ -163,10 +175,11 @@ function Update-WkVenueLocations {
       $from = 'lookup'
       $found = & $ask "bounded=1&viewbox=$box&q=$([uri]::EscapeDataString($text))"
       $zip = if ($address -match '\b(\d{5})(?:-\d{4})?\s*$') { $Matches[1] }
-      if (-not $found -and $zip -and $clock.requests -lt $MaxLookups) {
+      if (-not $found -and $zip -and -not (& $spent)) {
         $from = 'zip'
-        $found = & $ask "postalcode=$zip&country=us"
+        $found = & $ask "postalcode=$zip&country=us" -Area
       }
+      $clock.failures = 0
       $new = [ordered]@{}
       if ($found) {
         $new.lat = $found[0]
@@ -180,6 +193,7 @@ function Update-WkVenueLocations {
       $new.checked = $today
       $State[$key] = $new
     } catch {
+      $clock.failures++
       Write-Warning "venue lookup for '$($towns[$key].venue)' failed: $_"
     }
   }

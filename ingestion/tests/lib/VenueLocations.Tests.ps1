@@ -30,8 +30,8 @@ BeforeAll {
     }.GetNewClosure()
   }
 
-  function Invoke-Update($Events, $Raw = @(), $State = @{}, $Fetch = (New-Fetcher), [int]$Max = 300) {
-    Update-WkVenueLocations -RawEvents $Raw -Events $Events -State $State -Now $now -MaxLookups $Max -MinDelaySeconds 0 -Fetch $Fetch
+  function Invoke-Update($Events, $Raw = @(), $State = @{}, $Fetch = (New-Fetcher), [int]$Max = 300, [int]$Budget = 300) {
+    Update-WkVenueLocations -RawEvents $Raw -Events $Events -State $State -Now $now -MaxLookups $Max -BudgetSeconds $Budget -MinDelaySeconds 0 -Fetch $Fetch
   }
 
   $script:boise = [pscustomobject]@{ lat = '43.6187'; lon = '-116.2146'; display_name = 'Somewhere, Boise' }
@@ -132,6 +132,42 @@ Describe 'Update-WkVenueLocations' {
     $state = @{ v = [ordered]@{ from = 'none'; checked = '2026-01-01' } }
     $result = Invoke-Update @(New-Stored 'v') -State $state -Fetch (New-Fetcher -Throw) 3>$null
     $result.State['v'].checked | Should -Be '2026-01-01'
+  }
+
+  It 'stops when its time is spent' {
+    $events = @('a', 'b', 'c' | ForEach-Object { New-Stored $_ "$_ Hall" })
+    Invoke-Update $events -Budget 0 | Out-Null
+    $calls.Count | Should -Be 0
+  }
+
+  It 'stops after three failed lookups in a row' {
+    $events = @('a', 'b', 'c', 'd', 'e' | ForEach-Object { New-Stored $_ "$_ Hall" })
+    Invoke-Update $events -Fetch (New-Fetcher -Throw) 3>$null | Out-Null
+    $calls.Count | Should -Be 3
+  }
+
+  It 'keeps a source''s point for a venue whose events name two towns' {
+    $events = @((New-Stored 'expo-idaho' 'Expo Idaho' 'Boise'), (New-Stored 'expo-idaho' 'Expo Idaho' 'Garden City'))
+    $entry = (Invoke-Update $events @(New-Raw 'expo-idaho' 43.65 -116.28)).State['expo-idaho']
+    $entry.from | Should -Be 'feed'
+    $entry.lat | Should -Be 43.65
+  }
+
+  It 'keeps an earlier source''s point when the events now name two towns' {
+    $events = @((New-Stored 'expo-idaho' 'Expo Idaho' 'Boise'), (New-Stored 'expo-idaho' 'Expo Idaho' 'Garden City'))
+    $state = @{ 'expo-idaho' = [ordered]@{ lat = 43.65; lon = -116.28; from = 'feed'; checked = '2026-11-01' } }
+    (Invoke-Update $events -State $state).State['expo-idaho'].from | Should -Be 'feed'
+  }
+
+  It 'looks up a venue marked as several places once its events are in one town' {
+    $state = @{ 'v' = [ordered]@{ from = 'placeholder'; checked = '2026-11-20' } }
+    $result = Invoke-Update @(New-Stored 'v' 'V Hall') -State $state -Fetch (New-Fetcher @{ 'q=' = $boise })
+    $result.State['v'].from | Should -Be 'lookup'
+  }
+
+  It 'does not take a whole town as a venue''s place' {
+    $town = [pscustomobject]@{ lat = '43.6166'; lon = '-116.2008'; addresstype = 'city'; category = 'boundary'; type = 'administrative' }
+    (Invoke-Update @(New-Stored 'downtown-boise' 'Downtown Boise' 'Boise') -Fetch (New-Fetcher @{ 'q=' = $town })).State['downtown-boise'].from | Should -Be 'none'
   }
 
   It 'keeps entries for venues with no events now' {
