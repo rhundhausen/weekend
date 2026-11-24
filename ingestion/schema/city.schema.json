@@ -4,7 +4,7 @@
   "title": "Weekend city",
   "description": "A city repo's city.json: every city fact the core's scripts and website use.",
   "type": "object",
-  "required": ["siteName", "domain", "repo", "cityName", "timeZone", "state", "cities", "coordinates", "description", "logDatabase", "about"],
+  "required": ["siteName", "domain", "repo", "cityName", "timeZone", "state", "cities", "coordinates", "description", "logDatabase", "about", "cityCenters"],
   "additionalProperties": false,
   "properties": {
     "_comment": { "type": "string" },

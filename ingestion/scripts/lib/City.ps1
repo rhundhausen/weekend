@@ -119,8 +119,11 @@ function Read-WkCityFile {
   $city.botEmail = "$lower-bot@noreply.invalid"
   $city.reportFrom = "$($city.siteName) Reports <reports@$($city.domain)>"
   $city.issuesUrl = "https://github.com/$($city.repo)/issues/new?"
-  foreach ($town in @(if ($city.cityCenters) { $city.cityCenters.Keys })) {
+  foreach ($town in $city.cityCenters.Keys) {
     if ($town -notin $city.cities) { throw "$Path`: cityCenters has '$town', which is not one of the cities" }
+  }
+  foreach ($town in $city.cities) {
+    if (-not $city.cityCenters.ContainsKey($town)) { throw "$Path`: cityCenters has no center for '$town'" }
   }
   foreach ($key in 'cityAliases', 'zipCodes', 'titleAbbreviations', 'searchAliases', 'cityCenters') {
     if (-not $city[$key]) { $city[$key] = @{} }

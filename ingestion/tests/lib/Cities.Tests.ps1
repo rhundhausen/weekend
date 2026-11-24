@@ -191,9 +191,17 @@ Describe 'Read-WkCityFile town centers' {
     { Read-WkCityFile (Write-City $city) } | Should -Throw '*Twin Falls*'
   }
 
-  It 'reads a city.json with no centers' {
+  It 'rejects a city.json with no centers' {
     $city = $base.Clone()
     $city.Remove('cityCenters')
-    (Read-WkCityFile (Write-City $city)).cityCenters.Count | Should -Be 0
+    { Read-WkCityFile (Write-City $city) } | Should -Throw '*cityCenters*'
+  }
+
+  It 'rejects a town with no center' {
+    $city = $base.Clone()
+    $centers = @{} + $city.cityCenters
+    $centers.Remove('Boise')
+    $city.cityCenters = $centers
+    { Read-WkCityFile (Write-City $city) } | Should -Throw '*Boise*'
   }
 }
