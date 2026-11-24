@@ -5,7 +5,7 @@
 .DESCRIPTION
   The calendar page fills itself by posting action=get_events_date_ordered with a start and end
   date to /wp-admin/admin-ajax.php. This makes the same request once, for today through the next
-  180 days, after checking robots.txt. The answer's event_objects hold each event: title, dates,
+  365 days, after checking robots.txt. The answer's event_objects hold each event: title, dates,
   times ("5:30 pm"), venue terms, address, city, categories, price, and its page (permalink).
 
   A weekly event lists its dates in pattern_dates; each date in the window becomes its own event.
@@ -30,7 +30,7 @@ param(
 
 $invariant = [Globalization.CultureInfo]::InvariantCulture
 $today = (ConvertTo-LocalTime $FetchedAt).Substring(0, 10)
-$last = [DateTime]::ParseExact($today, 'yyyy-MM-dd', $invariant).AddDays(180).ToString('yyyy-MM-dd', $invariant)
+$last = [DateTime]::ParseExact($today, 'yyyy-MM-dd', $invariant).AddDays(365).ToString('yyyy-MM-dd', $invariant)
 
 function Get-EventasticPage {
   $site = ([uri]$Source.url).GetLeftPart('Authority')

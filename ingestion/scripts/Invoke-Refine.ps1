@@ -74,7 +74,7 @@ param(
   [int]$VenueBudgetSeconds = 300,
   [switch]$NoWrite,
   [string]$OutDir = './out',
-  [int]$Days = 180,
+  [int]$Days = 365,
   [int]$LinkBudgetSeconds = 900,
   [int]$CityBudgetSeconds = 180,
   [string]$SourcesPath,

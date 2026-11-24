@@ -160,7 +160,7 @@ Describe 'tribe adapter with excludeTitlePattern' {
 Describe 'eventastic adapter' {
   BeforeAll {
     # Visit McCall's admin-ajax answer of 2026-11-08, trimmed to the fields the adapter reads.
-    # fetchedAt is 2026-11-02, so the window is 2026-11-02 through 2027-05-01.
+    # fetchedAt is 2026-11-02, so the window is 2026-11-02 through 2027-11-02.
     $source = Get-TestSource 'visit-mccall'
     $events = Invoke-Adapter 'eventastic' $source 'eventastic/visit-mccall.json'
   }
@@ -194,8 +194,8 @@ Describe 'eventastic adapter' {
   }
 
   It 'keeps dates inside the window' {
-    @($events | Where-Object { $_.start.Substring(0, 10) -lt '2026-11-02' -or $_.start.Substring(0, 10) -gt '2027-05-01' }).Count | Should -Be 0
-    @($events | Where-Object title -eq 'Trivia Tuesdays at Seven Devils').Count | Should -Be 26
+    @($events | Where-Object { $_.start.Substring(0, 10) -lt '2026-11-02' -or $_.start.Substring(0, 10) -gt '2027-11-02' }).Count | Should -Be 0
+    @($events | Where-Object title -eq 'Trivia Tuesdays at Seven Devils').Count | Should -Be 44
   }
 
   It 'decodes titles' {

@@ -137,6 +137,6 @@ After merging, one show (same normalized title, venue, and city) never reads fre
 
 ## Lifecycle
 
-An event moves to the archive once it has ended, or once it has started if it has no `end`. An all-day event stays upcoming through its last day. Events starting more than 180 days out are left out until they're inside that window.
+An event moves to the archive once it has ended, or once it has started if it has no `end`. An all-day event stays upcoming through its last day. Events starting more than a year (365 days) out are left out until they're inside that window.
 
 A source that refreshes successfully replaces its stored upcoming events, so an event the publisher removed disappears. A source that fails keeps its stored events until a later run refreshes them.

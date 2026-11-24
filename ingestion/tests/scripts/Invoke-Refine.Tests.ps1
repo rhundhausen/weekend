@@ -45,6 +45,15 @@ Describe 'Invoke-Refine' {
     [ordered]@{ sources = @($list) } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $sourcesPath
   }
 
+  It 'keeps events up to a year out and leaves out later ones' {
+    Write-TestRaw @{ beta = @(
+        (New-TestEvent -Title 'Comedy of Errors' -Start '2027-09-23T20:00:00-06:00' -Url 'https://beta.test/errors'),
+        (New-TestEvent -Title 'Too Far' -Start '2027-11-20T20:00:00-07:00' -Url 'https://beta.test/far')
+      ) }
+    Invoke-TestRefine
+    @((Read-WkEventFile $eventsPath).title) | Should -Be @('Comedy of Errors')
+  }
+
   It 'fails with a clear message when the raw file is missing' {
     { Invoke-TestRefine } | Should -Throw '*raw-events.json*ingest*'
   }
