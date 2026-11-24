@@ -77,6 +77,20 @@ Describe 'Update-WkVenueLocations' {
     $calls.Count | Should -Be 0
   }
 
+  It 'keeps a venue named only by a street address at town level, even with a source''s point' {
+    $events = @(New-Stored '7497-w-whisper-rdg-dr' '7497 W Whisper Rdg Dr' 'Boise')
+    $raw = @(New-Raw '7497-w-whisper-rdg-dr' 43.61 -116.31 '7497 W Whisper Rdg Dr, Boise, ID 83709')
+    $entry = (Invoke-Update $events $raw -Fetch (New-Fetcher @{ 'q=' = $boise })).State['7497-w-whisper-rdg-dr']
+    $entry.from | Should -Be 'placeholder'
+    $entry.Keys | Should -Not -Contain 'address'
+    $entry.Keys | Should -Not -Contain 'lat'
+    $calls.Count | Should -Be 0
+  }
+
+  It 'looks up a venue whose name only starts with a number' {
+    (Invoke-Update @(New-Stored '10-barrel' '10 Barrel Brewing' 'Boise') -Fetch (New-Fetcher @{ 'q=' = $boise })).State['10-barrel'].from | Should -Be 'lookup'
+  }
+
   It 'does not count Other as a second town' {
     $events = @((New-Stored 'star-library'), (New-Stored 'star-library' 'Star Library' 'Other'))
     (Invoke-Update $events -Fetch (New-Fetcher @{ 'q=' = $boise })).State['star-library'].from | Should -Be 'lookup'

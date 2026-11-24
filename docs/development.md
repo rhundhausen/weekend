@@ -150,6 +150,9 @@ Refine keeps where each venue is in `data/venue-locations.json`, for the site's 
   goes to its own town's center, so estate sales never point at a home. A point a source sent
   wins over the town rule, since sources disagree about towns more than about points, and a venue
   whose events settle in one town again is looked up.
+- **Street addresses:** a venue named only by a street address ("7497 W Whisper Rdg Dr") is most
+  often a home, so it is a placeholder too, even when a source sent its point, and its address is
+  not kept.
 - **Politeness:** 1 second between Nominatim requests, the bot's User-Agent, at most
   `-VenueLookups` (default 200) requests and `-VenueBudgetSeconds` (default 300) per run, and a
   stop after three failed requests in a row, so a first fill may take two nights and a slow

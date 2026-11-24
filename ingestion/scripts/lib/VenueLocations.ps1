@@ -114,6 +114,7 @@ function Update-WkVenueLocations {
 
   # A town, county, or ZIP code is where a venue is, not the venue: a lookup of "Downtown Boise"
   # answers with Boise itself.
+  $streetOnly = '^\s*\d+[A-Za-z]?\s+.*\b(St|Street|Rd|Road|Dr|Drive|Ave|Avenue|Ln|Lane|Way|Ct|Court|Pl|Place|Blvd|Boulevard|Cir|Circle|Loop|Trl|Trail|Pkwy|Parkway|Hwy|Highway|Ter|Terrace)\.?\s*(,.*)?$'
   $areaTypes = @('city', 'town', 'village', 'hamlet', 'municipality', 'county', 'state', 'region', 'postcode', 'country')
   $ask = {
     param([string]$Query, [switch]$Area)
@@ -140,7 +141,9 @@ function Update-WkVenueLocations {
     $entry = $State[$key]
     if ($entry -and $entry.from -eq 'manual') { continue }
 
-    $named = $key -like 'various-*' -or $key -like '*-area'
+    # A venue named only by a street address is most often someone's home (an estate sale, a
+    # class in a living room), so it stays at its town's center and its address is not kept.
+    $named = $key -like 'various-*' -or $key -like '*-area' -or $towns[$key].venue -match $streetOnly
     if ($named -or ($key -in $placeholders -and -not $points.ContainsKey($key) -and -not ($entry -and $entry.from -eq 'feed'))) {
       if (-not $entry -or $entry.from -ne 'placeholder') { $State[$key] = [ordered]@{ from = 'placeholder'; checked = $today } }
       continue
