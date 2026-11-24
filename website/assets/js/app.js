@@ -107,6 +107,8 @@ function prepare(e) {
     startKey: allDay ? '' : `${sd} ${hmFmt.format(new Date(instant))}`,
     endKey: endParsed > instant ? `${localDay(new Date(endParsed))} ${hmFmt.format(new Date(endParsed))}` : '',
     dateText, timeText,
+    // The map point from the build, [lat, lon, exact], or null for an event the map can't place.
+    spot: e.l || null,
     hay: fold(searchable.join(' ')),
   };
 }
@@ -260,6 +262,8 @@ function render() {
   renderSortHeaders();
   writeUrl();
   queueLog(shown.length);
+  lastShown = shown;
+  if (view === 'map' && mapView) mapView.update(shown);
 }
 
 // Visitor log: the page reports the view when it opens, then each set of filters once it has
@@ -637,19 +641,55 @@ for (const th of document.querySelectorAll('th[data-sort] button')) {
     render();
   });
 }
-// List or map. The map is not built yet, so Map only shows a short note and the list stays.
-const viewNote = $('view-note');
-let viewNoteTimer = 0;
+// List or map. The map shows every event the list would show, on every page. Its code (map.js)
+// and MapLibre load the first time Map is chosen, so the list never waits for them.
+let view = 'list';
+let mapView = null;
+let mapLoading = null;
+let lastShown = [];
+const mapPanel = $('map-panel');
+const listParts = [document.querySelector('.table-wrap'), document.querySelector('.paging.bottom'), el.pagerTop];
+
+function loadMapStyles() {
+  if (document.querySelector('link[data-map-css]')) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = cfg.map.css;
+  link.dataset.mapCss = '';
+  document.head.append(link);
+}
+
+function showView(next) {
+  view = next;
+  for (const b of document.querySelectorAll('.view-btn')) b.setAttribute('aria-pressed', String(b.dataset.view === next));
+  for (const part of listParts) if (part) part.hidden = next === 'map';
+  mapPanel.hidden = next !== 'map';
+  // The map shows every match, so the count drops "Showing 1 to 25 of" (site.css).
+  document.querySelector('main')?.classList.toggle('map-mode', next === 'map');
+  if (next !== 'map') return;
+  if (mapView) {
+    mapView.resize();
+    mapView.update(lastShown);
+    return;
+  }
+  loadMapStyles();
+  mapLoading ??= import(cfg.map.js)
+    .then((m) => m.openMap($('map'), $('map-note'), cfg))
+    .then((m) => {
+      mapView = m;
+      if (view === 'map') mapView.update(lastShown);
+    })
+    .catch((err) => {
+      mapLoading = null;
+      $('map-note').textContent = `The map could not load (${err.message}).`;
+    });
+}
+
 document.querySelector('.view-toggle')?.addEventListener('click', (ev) => {
   const b = ev.target.closest('.view-btn');
-  if (!b || b.dataset.view !== 'map') return;
-  viewNote.textContent = 'Map view is coming soon. For now, events are shown as a list.';
-  viewNote.hidden = false;
-  clearTimeout(viewNoteTimer);
-  viewNoteTimer = setTimeout(() => { viewNote.hidden = true; }, 4000);
+  if (b && b.dataset.view !== view) showView(b.dataset.view);
 });
 document.addEventListener('keydown', (ev) => {
-  if (ev.key === 'Escape' && viewNote && !viewNote.hidden) viewNote.hidden = true;
   if (ev.key === '/'&& document.activeElement?.tagName !== 'INPUT') {
     ev.preventDefault();
     el.q.focus();

@@ -122,11 +122,13 @@
 {{- range hugo.Data.sources.sources }}{{ if .name }}{{ $sourceNames = merge $sourceNames (dict .name .displayName) }}{{ end }}{{ end }}
 {{- /* The map's files, which app.js loads only when Map is first chosen. MapLibre (vendor/maplibre,
      see website/README.md) finds its worker by setWorkerUrl, so the worker is served from this
-     site and the Content-Security-Policy keeps script-src 'self'. */}}
-{{- $mapLib := resources.Get "vendor/maplibre/maplibre-gl.mjs" | fingerprint }}
-{{- $mapWorker := resources.Get "vendor/maplibre/maplibre-gl-worker.mjs" | fingerprint }}
+     site and the Content-Security-Policy keeps script-src 'self'. Both are published as .js, a
+     name every server sends as JavaScript; some send .mjs as plain text, which a browser won't run. */}}
+{{- $mapLib := resources.Get "vendor/maplibre/maplibre-gl.mjs" | resources.Copy "vendor/maplibre/maplibre-gl.js" | fingerprint }}
+{{- $mapWorker := resources.Get "vendor/maplibre/maplibre-gl-worker.mjs" | resources.Copy "vendor/maplibre/maplibre-gl-worker.js" | fingerprint }}
 {{- $mapCSS := resources.Get "vendor/maplibre/maplibre-gl.css" | fingerprint }}
-{{- $map := dict "maplibre" $mapLib.RelPermalink "worker" $mapWorker.RelPermalink "css" $mapCSS.RelPermalink "center" (slice $city.coordinates.lat $city.coordinates.lon) }}
+{{- $mapJS := resources.Get "js/map.js" | js.Build (dict "minify" true "target" "es2020" "format" "esm") | fingerprint }}
+{{- $map := dict "js" $mapJS.RelPermalink "maplibre" $mapLib.RelPermalink "worker" $mapWorker.RelPermalink "css" $mapCSS.RelPermalink "center" (slice $city.coordinates.lat $city.coordinates.lon) }}
 {{- $cfg := dict "map" $map "events" $data.RelPermalink "categories" $cats "sizes" $sizes "sizeOrder" $sizeOrder "lastIngest" $lastIngest "sources" $sourceNames "phrases" (hugo.Data.display.phrases | default slice) "tz" $city.timeZone "aliases" ($city.searchAliases | default dict) "state" (slice $city.state.code $city.state.name) "catPaths" $catPaths "cityPaths" $cityPaths "home" (relURL "/") "page" $category "cityPage" $cityPage }}
 
 <header class="top">
@@ -258,14 +260,13 @@
 
   <div class="status">
     <div class="status-left">
-      {{- /* List or map. The map is not built yet: choosing it only shows a short note (app.js). */}}
+      {{- /* List or map (app.js showView). */}}
       <div class="view-toggle" role="group" aria-label="View">
         <button type="button" class="view-btn" data-view="list" aria-pressed="true">List</button>
         <button type="button" class="view-btn" data-view="map" aria-pressed="false">Map</button>
       </div>
       <p id="count" aria-live="polite">Loading events</p>
     </div>
-    <p class="view-note" id="view-note" role="status" hidden></p>
     <nav class="pager" id="pager-top" aria-label="Pages"></nav>
   </div>
 
@@ -323,6 +324,12 @@
         {{- end }}
       </tbody>
     </table>
+  </div>
+
+  {{- /* The map, drawn by assets/js/map.js when Map is first chosen. */}}
+  <div class="map-panel" id="map-panel" hidden>
+    <div class="map" id="map" role="region" aria-label="Map of the events shown"></div>
+    <p class="map-note" id="map-note" aria-live="polite"></p>
   </div>
 
   <div class="paging bottom">

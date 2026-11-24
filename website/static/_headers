@@ -2,13 +2,17 @@
 #
 # Every page: the site loads only its own files (no inline script or style, no outside scripts,
 # fonts, or CDNs), so the Content-Security-Policy allows only 'self'. Images also allow data:, for
-# the header logo the stylesheet carries inline. Event text comes from outside sources; the policy
+# the header logo the stylesheet carries inline. The map (assets/js/map.js) is the one exception,
+# and only for data: it fetches its style, tiles, fonts, and icons from tiles.openfreemap.org
+# (connect-src), draws icons through blob: images (img-src), and runs MapLibre's worker, which the
+# site serves itself (worker-src 'self'). geolocation=(self) lets the map ask where the visitor is;
+# the answer never leaves the page. Event text comes from outside sources; the policy
 # is a second guard behind app.js setting it only with textContent. The page may not be framed.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://tiles.openfreemap.org; worker-src 'self'; font-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  Permissions-Policy: camera=(), microphone=(), geolocation=(self), payment=(), usb=()
   X-Frame-Options: DENY
 
 # Files under /css/, /js/, and /data/ have a content hash in their names (Hugo's fingerprint), so

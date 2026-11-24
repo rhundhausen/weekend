@@ -452,23 +452,60 @@ input:focus-visible, select:focus-visible, button:focus-visible {
 .view-btn + .view-btn { border-left: 1px solid var(--border); }
 .view-btn:hover { color: var(--accent); }
 .view-btn[aria-pressed="true"] { color: var(--accent-text); background: var(--accent); }
-/* The "coming soon" note under the toggle when Map is clicked. */
-.view-note {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  z-index: 5;
-  margin: 0;
-  max-width: min(340px, calc(100vw - 32px));
-  padding: 8px 12px;
+/* List or map: app.js hides the list's parts with the hidden attribute, which their own display
+   rules would otherwise override. */
+.table-wrap[hidden], .paging[hidden], .pager[hidden], .map-panel[hidden] { display: none; }
+.map-panel { margin: 10px 0 0; }
+.map-mode .count-range { display: none; }
+.map {
+  height: min(72vh, 680px);
+  min-height: 360px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.map-note {
+  margin: 8px 0 0;
   font-size: 13px;
+  color: var(--page-muted);
+}
+/* The visitor's position, when they share it. */
+.map-me {
+  width: 16px;
+  height: 16px;
+  background: #2563eb;
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 6px rgb(37 99 235 / 25%);
+}
+/* A point's popup: its events, soonest first. */
+.map .maplibregl-popup-content {
+  padding: 10px 12px;
+  font: 13px/1.35 var(--font);
   color: var(--text);
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
   border-radius: 6px;
   box-shadow: var(--shadow);
 }
+.map .maplibregl-popup-tip { border-top-color: var(--surface); border-bottom-color: var(--surface); }
+.map .maplibregl-popup-close-button { font-size: 18px; color: var(--muted); }
+.map-pop p { margin: 0; }
+.map-pop-place { padding-right: 16px; font-weight: 600; }
+.map-pop-note { margin-top: 2px; font-size: 12px; color: var(--muted); }
+.map-pop ul {
+  max-height: 240px;
+  margin: 6px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.map-pop li { padding: 5px 0; border-top: 1px solid var(--border); }
+.map-pop-when, .map-pop-venue { display: block; font-size: 12px; color: var(--muted); }
+.map-pop-title { display: block; color: var(--text); }
+a.map-pop-title { color: var(--accent); text-decoration: none; }
+a.map-pop-title:hover { text-decoration: underline; }
+.map-pop-more { margin-top: 4px; font-size: 12px; color: var(--muted); }
 #count {
   margin: 0;
   font-size: 13px;
