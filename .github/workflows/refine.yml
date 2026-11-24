@@ -109,7 +109,7 @@ jobs:
 
       - name: Commit data
         run: |
-          $paths = 'data/events.json', 'data/archive', 'data/links.json', 'data/city-lookup.json', 'data/meta.json'
+          $paths = 'data/events.json', 'data/archive', 'data/links.json', 'data/city-lookup.json', 'data/venue-locations.json', 'data/meta.json'
           ./.core/ingestion/scripts/Publish-Data.ps1 -Path $paths -Message 'data: nightly refine'
 
   # The summary email, in its own job because GitHub serves a job's log only once that job has

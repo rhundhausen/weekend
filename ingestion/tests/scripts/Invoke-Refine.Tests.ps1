@@ -11,10 +11,11 @@ BeforeAll {
       [string]$Title = 'Show',
       [string]$Start = '2026-11-20T19:30:00-07:00',
       [string]$Source = 'beta',
-      [string]$Url = 'https://beta.test/show'
+      [string]$Url = 'https://beta.test/show',
+      [hashtable]$Location = @{}
     )
     New-WkEvent -Title $Title -Start $Start -Venue 'Hall' -City 'Boise' -Category 'music' -Url $Url `
-      -Sources @(@{ name = $Source; url = $Url; fetchedAt = '2026-11-15T07:01:00Z' })
+      -Sources @(@{ name = $Source; url = $Url; fetchedAt = '2026-11-15T07:01:00Z' }) @Location
   }
 
   function Write-TestRaw {
@@ -27,7 +28,7 @@ BeforeAll {
   function Invoke-TestRefine {
     param([hashtable]$Options = @{})
     $null = & $refine -InputPath $script:rawPath -OutputPath $script:eventsPath -SourcesPath $script:sourcesPath `
-      -OutDir (Join-Path $script:dir 'out') -Now $now -SkipLinkCheck -SkipCityLookup @Options *>&1
+      -OutDir (Join-Path $script:dir 'out') -Now $now -SkipLinkCheck -SkipCityLookup -SkipVenueLookup @Options *>&1
   }
 }
 
@@ -170,10 +171,33 @@ Describe 'Invoke-Refine' {
     $report.skipLinkCheck | Should -BeTrue
   }
 
+  It 'keeps the venue''s location in venue-locations.json and out of the event files' {
+    $here = @{ Latitude = 43.6033; Longitude = -116.2012; Address = '2201 W Cesar Chavez Ln, Boise, ID 83725' }
+    Write-TestRaw @{ beta = @((New-TestEvent -Location $here), (New-TestEvent -Title 'Last Week' -Start '2026-11-10T19:30:00-07:00' -Url 'https://beta.test/old' -Location $here)) }
+    Invoke-TestRefine
+    $venues = Get-Content (Join-Path $dir 'venue-locations.json') -Raw | ConvertFrom-Json -DateKind String
+    $venues.hall.from | Should -Be 'feed'
+    $venues.hall.lat | Should -Be 43.6033
+    $venues.hall.address | Should -Be '2201 W Cesar Chavez Ln, Boise, ID 83725'
+    (Get-Content $eventsPath -Raw) | Should -Not -Match '"location"'
+    (Get-Content (Join-Path $dir 'archive' '2026-11.json') -Raw) | Should -Not -Match '"location"'
+  }
+
+  It 'looks nothing up with -SkipVenueLookup, and says so in the run report' {
+    Write-TestRaw @{ beta = @(New-TestEvent) }
+    Invoke-TestRefine
+    $venues = Get-Content (Join-Path $dir 'venue-locations.json') -Raw | ConvertFrom-Json -DateKind String
+    $venues.PSObject.Properties.Name | Should -Not -Contain 'hall'
+    $report = Get-Content (Join-Path $dir 'out' 'refine.json') -Raw | ConvertFrom-Json -DateKind String
+    $report.venueLookup.skipped | Should -BeTrue
+    $report.venueLookup.looked | Should -Be 0
+  }
+
   It 'writes nothing with -NoWrite' {
     Write-TestRaw @{ beta = @(New-TestEvent) }
     Invoke-TestRefine @{ NoWrite = $true }
     Test-Path -LiteralPath $eventsPath | Should -BeFalse
     Test-Path -LiteralPath (Join-Path $dir 'meta.json') | Should -BeFalse
+    Test-Path -LiteralPath (Join-Path $dir 'venue-locations.json') | Should -BeFalse
   }
 }
