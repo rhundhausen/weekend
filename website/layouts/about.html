@@ -81,6 +81,12 @@
   <h3>City</h3>
   <p>Where the event is, from its address or venue.{{ with $city.about.cityNote }} {{ . | safeHTML }}{{ end }} <em>Other</em> means the source did not say and the event's page did not settle it. The City list shows only cities with upcoming events, and its counts follow the other filters you pick.</p>
 
+  <h2 id="map">The map</h2>
+  <p>Map shows the events that match your current search and filters. Drag to move around, and pinch or scroll to zoom. Nearby events are grouped into a circle with a count; tap it to zoom in, or tap a pin to see what's happening there.</p>
+  <p>A filled pin is the venue itself. Its location comes from the event's own listing, or from looking the venue up on OpenStreetMap. An outlined pin means we only know the town or ZIP code, so the pin sits at its center. Estate sales and auctions are always shown this way, because {{ $city.siteName }} never stores a home's address.</p>
+  <p>If you allow it, the map opens where you are. Your location stays in your browser: {{ $city.siteName }} never sends it, stores it, or logs it. If you say no, or you're outside the area, the map shows the whole region instead.</p>
+  <p>Map data &copy; <a href="https://www.openstreetmap.org/copyright" rel="noopener" target="_blank">OpenStreetMap contributors</a>, tiles by <a href="https://openfreemap.org" rel="noopener" target="_blank">OpenFreeMap</a>.</p>
+
   <h2>Meetup events</h2>
   <p>Meetup group events are hidden until you check <em>Include Meetups</em>, because many groups are only partly public. The events are posted publicly, but some groups let only members RSVP or see the exact location. You may need a free Meetup account, and to join the group, before you can go.</p>
 

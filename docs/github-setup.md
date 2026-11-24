@@ -10,7 +10,9 @@ branch: the nightly schedule only runs on the default branch. Add the city's own
 (development.md, "Core and city repos"):
 
 - `city.json`, checked by `ingestion/schema/city.schema.json`. `siteName`, `domain`, and `repo`
-  set the bot's User-Agent, the data commit identity, and the report sender.
+  set the bot's User-Agent, the data commit identity, and the report sender. `cityCenters` gives
+  each of the `cities` a center (`lat`, `lon`), where the map puts events it can't place at their
+  venue.
 - `ingestion/sources.json` ([sources.md](sources.md)).
 - `data/schema/` with the city's `venue-aliases.json`, `place-cities.json`, and `sizes.json`.
 - `website/wrangler.jsonc`, `website/static/`, `website/data/display.json`, and optionally
@@ -80,8 +82,8 @@ also covers cities added later. The sender, `<siteName> Reports <reports@<domain
 3. Refine starts by itself when ingest finishes. When it finishes, check:
    - The run is green and its log starts with the raw file's `asOf` and source count.
    - `main` has a new commit titled `data: nightly refine YYYY-MM-DD` that changes only
-     `data/events.json`, `data/archive/`, `data/links.json`, `data/city-lookup.json`, and
-     `data/meta.json`, and Cloudflare deployed it.
+     `data/events.json`, `data/archive/`, `data/links.json`, `data/city-lookup.json`,
+     `data/venue-locations.json`, and `data/meta.json`, and Cloudflare deployed it.
    - The test workflow did not run for either commit.
 4. If a commit step fails with a permission error, recheck step 2.
 

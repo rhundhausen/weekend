@@ -43,10 +43,11 @@ commit identity "`<siteName>` bot", and the report sender `<siteName> Reports <r
    in `data/raw-events.json`, one entry per source. It does nothing else.
 3. **Refine** (`ingestion/scripts/Invoke-Refine.ps1`, started when ingest finishes, even if ingest
    failed) reads the raw file, dedupes across sources, fills in cities, moves old cost fields to
-   `costTier`, looks up the city of events still stored as Other by reading their pages, checks
-   event links, and writes `data/events.json` (upcoming only), `data/archive/YYYY-MM.json` (past
-   events), `data/links.json`, `data/city-lookup.json`, and `data/meta.json`. It never fetches a
-   source, so it can be rerun by hand as often as needed.
+   `costTier`, looks up the city of events still stored as Other by reading their pages, finds
+   where each venue is for the map, checks event links, and writes `data/events.json` (upcoming
+   only), `data/archive/YYYY-MM.json` (past events), `data/links.json`, `data/city-lookup.json`,
+   `data/venue-locations.json`, and `data/meta.json`. It never fetches a source, so it can be rerun
+   by hand as often as needed.
 4. Each workflow commits only the files it owns. Refine's commit deploys the site.
 
 **File ownership.** No file is written by both stages:
@@ -54,7 +55,7 @@ commit identity "`<siteName>` bot", and the report sender `<siteName> Reports <r
 | File | Written by |
 | --- | --- |
 | `data/raw-events.json` | ingest |
-| `data/events.json`, `data/archive/`, `data/links.json`, `data/city-lookup.json`, `data/meta.json` | refine |
+| `data/events.json`, `data/archive/`, `data/links.json`, `data/city-lookup.json`, `data/venue-locations.json`, `data/meta.json` | refine |
 | `data/schema/` | people, by hand |
 
 The raw file holds `asOf` (the scheduled midnight, or the time a manual run started) and, per
@@ -132,6 +133,26 @@ the text-based fill-in, refine reads their pages to find the city
 - **Skipping it:** `-SkipCityLookup`, or the "Skip the city lookup" box on a manual refine run,
   makes no requests but still applies the cities already found.
 
+### Venue locations
+
+Refine keeps where each venue is in `data/venue-locations.json`, for the site's map
+(`Update-WkVenueLocations` in `ingestion/scripts/lib/VenueLocations.ps1`; the file is described in
+[schema.md](schema.md), "Venue locations").
+
+- **Order:** the coordinates a source sent with the event come first and are trusted. Ticketmaster,
+  Eventbrite, Meetup, tribe, and eventastic send them or an address (`New-WkEvent -Latitude
+  -Longitude -Address`); they ride on the raw events only. Next, OpenStreetMap's Nominatim search,
+  by the source's address or by "venue, town, state", and only an answer within 150 miles of the
+  city counts. Last, the center of the address's ZIP code. The site puts any other event at its
+  town's center (`cityCenters` in `city.json`).
+- **Placeholders:** a venue that isn't one place is never looked up: a `various-` or `-area` key, or
+  a venue whose events are in more than one town, such as an auction company. Each of its events
+  goes to its own town's center, so estate sales never point at a home.
+- **Politeness:** 1 second between Nominatim requests, the bot's User-Agent, and at most
+  `-VenueLookups` (default 200) requests per run, so a first fill may take two nights. A venue not
+  found is tried again after 30 days; a found one is kept.
+- **Skipping it:** `-SkipVenueLookup` makes no requests but still records what sources sent.
+
 ### Link check
 
 After the merge, refine checks the event links that are due (`ingestion/scripts/lib/Links.ps1`),
@@ -190,7 +211,8 @@ Pester tests and the Worker's tests on every push and pull request.
 - **Refine** checks out the head of `main`, so it sees the raw file ingest just committed, logs the
   raw file's `asOf` and source count, and fails with a clear message if there is no raw file. It
   uploads `out/` as the `refine-out` artifact, then commits `data/events.json`, `data/archive/`,
-  `data/links.json`, `data/city-lookup.json`, and `data/meta.json` without `[skip ci]`, which
+  `data/links.json`, `data/city-lookup.json`, `data/venue-locations.json`, and `data/meta.json`
+  without `[skip ci]`, which
   deploys the site. **To rerun it by hand** (after changing a merge or city rule): Actions > refine
   > Run workflow, optionally ticking "Skip the link check" or "Skip the city lookup". No source is
   fetched.

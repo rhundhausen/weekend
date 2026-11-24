@@ -82,6 +82,19 @@ Sources spell a venue in different ways: Ticketmaster has `Neurolux Lounge` and 
 
 Some sources, mostly aggregators, give no city, so their events fall back to `Other`. After merging, refine looks for the city in the event's own venue, title, and description, from strongest clue to weakest: a ZIP code in the city's area, "City, ST" with the city's state, "(City)" in the title, a city in the venue name, a known place, a venue other sources place in one city, "in" or "downtown" before a city, then a city named in the title or description. A clue that names two cities is ambiguous and leaves `Other`. Cities whose names are also everyday words or surnames (Star or Weiser in Boise's area) are listed in `city.json`'s `ambiguousCities` and count only from a ZIP code or "City, ST". Known places and names to ignore (in Boise, the Basque Block and Boise Cascade) are in the city's `data/schema/place-cities.json`; add a line there to teach it a place. Only the city changes, so the `id` stays the same. The code is `Resolve-WkOtherCity` in `ingestion/scripts/lib/Cities.ps1`, and every refine run applies it to stored data, including the archive.
 
+## Venue locations
+
+`data/venue-locations.json`, written by refine for the site's map (development.md, "Venue locations"), maps each `venueKey` to where the venue is. The JSON Schema is `ingestion/schema/venue-locations.schema.json`.
+
+| Field | Notes |
+| --- | --- |
+| `lat`, `lon` | The point, when one is known |
+| `address` | The address a source sent, as "street, town, ST ZIP" |
+| `from` | `feed` (a source sent it), `lookup` (found on OpenStreetMap), `zip` (the center of the address's ZIP code), `manual` (set by hand), `none` (looked up, not found), or `placeholder` (not one place) |
+| `checked` | The day it was last set, `YYYY-MM-DD` |
+
+To fix a pin, edit the venue's entry, give it the right `lat` and `lon`, and set `from` to `manual`: refine never changes a manual entry. Events themselves never store a location. Raw events may carry a `location` (`lat`, `lon`, `address`) from their source, which refine moves here.
+
 ## Size
 
 `size` is a best guess at the crowd, not a count. No source reports attendance.
