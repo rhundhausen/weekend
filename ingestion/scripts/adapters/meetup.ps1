@@ -105,6 +105,7 @@ foreach ($item in (ConvertFrom-Ics $text)) {
       $venue = $stored.venue
       $venueKey = $stored.venueKey
       $city = $stored.city
+      $place = $stored.location
     } else {
       $page = Get-MeetupText $url
       $node = @(Get-WkJsonLdEvent $page) | Select-Object -First 1
@@ -117,6 +118,12 @@ foreach ($item in (ConvertFrom-Ics $text)) {
       $venue = ConvertTo-PlainText "$($location.name)"
       if (-not $venue) { $venue = $Source.venue }
       $venueKey = Get-VenueKey $venue
+      $postal = $location.address
+      $place = @{
+        lat     = ConvertTo-WkCoordinate $location.geo.latitude
+        lon     = ConvertTo-WkCoordinate $location.geo.longitude
+        address = ConvertTo-WkAddressLine -Street "$($postal.streetAddress)" -Town "$($postal.addressLocality)" -State "$($postal.addressRegion)" -Zip "$($postal.postalCode)"
+      }
     }
 
     # Meetup starts each description with the group's name.
@@ -128,7 +135,8 @@ foreach ($item in (ConvertFrom-Ics $text)) {
     New-WkEvent -Title $title -Start $item.Start -End $item.End -AllDay:$item.AllDay `
       -Venue $venue -VenueKey $venueKey -City $city `
       -Category $Source.category -InferCategory:([bool]$Source.inferCategory) -Url $url -Description $description.Trim() `
-      -Sources @(@{ name = $Source.name; url = $url; fetchedAt = $FetchedAt })
+      -Sources @(@{ name = $Source.name; url = $url; fetchedAt = $FetchedAt }) `
+      -Latitude $place.lat -Longitude $place.lon -Address $place.address
   } catch {
     if ("$_" -match 'robots.txt disallows') { throw }
     Write-Warning "$($Source.name): skipping '$title': $_"

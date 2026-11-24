@@ -29,7 +29,13 @@ BeforeAll {
       '@context' = 'https://schema.org'; '@type' = 'Event'; name = 'x'; startDate = '2026-11-11T18:00:00-07:00'
       eventAttendanceMode = "https://schema.org/${Mode}EventAttendanceMode"
       location = @{ '@type' = 'Place'; name = $Place; address = @{ '@type' = 'PostalAddress'; addressLocality = $City; addressRegion = 'ID' } }
-    } | ConvertTo-Json -Depth 5
+    }
+    if ($Place -eq 'Yogurtz Grill') {
+      $node.location.address.streetAddress = '1700 E Fairview Ave'
+      $node.location.address.postalCode = '83642'
+      $node.location.geo = @{ '@type' = 'GeoCoordinates'; latitude = 43.6194; longitude = -116.3681 }
+    }
+    $node = $node | ConvertTo-Json -Depth 5
     "<html><head><script type=`"application/ld+json`">$node</script></head><body>event</body></html>"
   }
 
@@ -47,7 +53,7 @@ BeforeAll {
   # Event 6 is already in the raw file from an earlier night, so its page is not read again.
   $script:rawPath = Join-Path $TestDrive 'raw-events.json'
   $known = New-WkEvent -Title 'Known Night' -Start '2026-11-15T18:00:00-07:00' -Venue 'Eagle Library' -City 'Eagle' -Category 'nightlife-social' `
-    -Url 'https://www.meetup.com/adult-board-game-night/events/6/' -Sources @(@{ name = 'meetup-board-games'; url = 'https://www.meetup.com/adult-board-game-night/events/6/'; fetchedAt = '2026-11-05T10:00:00Z' })
+    -Address '400 E Mission St, Eagle, ID 83616' -Url 'https://www.meetup.com/adult-board-game-night/events/6/' -Sources @(@{ name = 'meetup-board-games'; url = 'https://www.meetup.com/adult-board-game-night/events/6/'; fetchedAt = '2026-11-05T10:00:00Z' })
   $raw = Update-WkRawFile $null -Results @([pscustomobject]@{ Name = 'meetup-board-games'; Status = 'ok'; Events = @($known) }) -Keep @('meetup-board-games') -AsOf '2026-11-05T07:00:00Z' -FetchedAt '2026-11-05T10:00:00Z'
   Write-WkRawFile $rawPath $raw
 
@@ -67,6 +73,17 @@ Describe 'meetup adapter' {
     $e.city | Should -Be 'Meridian'
     $e.start | Should -Be '2026-11-11T18:00:00-07:00'
     $e.url | Should -Be 'https://www.meetup.com/adult-board-game-night/events/1/'
+  }
+
+  It 'keeps the address and coordinates from the event page' {
+    $e = $events | Where-Object title -like 'Meridian*'
+    $e.location.address | Should -Be '1700 E Fairview Ave, Meridian, ID 83642'
+    $e.location.lat | Should -Be 43.6194
+    $e.location.lon | Should -Be -116.3681
+  }
+
+  It 'reuses the address already in the raw file' {
+    ($events | Where-Object title -eq 'Known Night').location.address | Should -Be '400 E Mission St, Eagle, ID 83616'
   }
 
   It 'reuses the venue and city already in the raw file, without reading the page again' {

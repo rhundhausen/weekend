@@ -44,6 +44,12 @@ Describe 'eventbrite adapter' {
     $events.Count | Should -Be 1
   }
 
+  It 'keeps the venue''s address and coordinates' {
+    $events[0].location.address | Should -Be '1009 Main St, Boise, ID 83702'
+    $events[0].location.lat | Should -Be 43.6157
+    $events[0].location.lon | Should -Be -116.2028
+  }
+
   It 'reads an event in Boise time' {
     $events[0].title | Should -Be 'Example Pottery Workshop'
     $events[0].start | Should -Be '2026-11-14T10:00:00-07:00'

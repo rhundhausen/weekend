@@ -108,6 +108,7 @@ for ($n = 0; $n -lt $kept.Count; $n++) {
     }
 
     $venueName = ConvertTo-PlainText $item.primary_venue.name
+    $address = $item.primary_venue.address
     $city = Resolve-WkCity $item.primary_venue.address.city
     $url = "$($item.url)"
 
@@ -122,7 +123,9 @@ for ($n = 0; $n -lt $kept.Count; $n++) {
     New-WkEvent -Title (ConvertTo-PlainText $item.name) -Start $start -End $end -AllDay:$allDay `
       -Venue ($venueName ? $venueName : $Source.venue) -VenueKey ($venueName ? (Get-VenueKey $venueName) : $Source.venueKey) `
       -City ($city ? $city : $Source.city) -Category $Source.category -InferCategory:([bool]$Source.inferCategory) `
-      -Url $url -Description $item.summary -PriceMin $priceMin -Sources @(@{ name = $Source.name; url = $url; fetchedAt = $FetchedAt })
+      -Url $url -Description $item.summary -PriceMin $priceMin -Sources @(@{ name = $Source.name; url = $url; fetchedAt = $FetchedAt }) `
+      -Latitude (ConvertTo-WkCoordinate $address.latitude) -Longitude (ConvertTo-WkCoordinate $address.longitude) `
+      -Address ($address.localized_address_display ? "$($address.localized_address_display)" : (ConvertTo-WkAddressLine -Street $address.address_1 -Town $address.city -State $address.region -Zip $address.postal_code))
   } catch {
     if ("$_" -match 'robots.txt disallows') { throw }
     Write-Warning "$($Source.name): skipping '$($item.name)': $_"

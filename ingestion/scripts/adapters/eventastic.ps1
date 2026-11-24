@@ -109,6 +109,7 @@ foreach ($item in @($page.event_objects.PSObject.Properties.Value)) {
         City = $city; Category = $Source.category; InferCategory = [bool]$Source.inferCategory; Labels = $labels
         Url = $url; Description = $item.post_content; PriceMin = $price
         Sources = @(@{ name = $Source.name; url = $url; fetchedAt = $FetchedAt })
+        Address = (ConvertTo-WkAddressLine -Street $meta.addr1 -Town $meta.city -State $meta.state -Zip $meta.zip)
       }
       if ($null -eq $startMinutes) {
         New-WkEvent @common -Start $first -End ($final -gt $first ? $final : $null) -AllDay

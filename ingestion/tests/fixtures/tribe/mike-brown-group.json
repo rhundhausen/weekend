@@ -95,6 +95,8 @@
         "venue": "Shrine Social Club",
         "slug": "shrine-social-club",
         "address": "1118 West Idaho Street",
+        "geo_lat": 43.6175,
+        "geo_lng": -116.2047,
         "city": "Boise",
         "country": "United States",
         "province": "Idaho",

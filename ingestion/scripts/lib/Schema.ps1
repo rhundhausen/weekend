@@ -395,6 +395,37 @@ function ConvertTo-WkTitleCase {
   $out.ToString()
 }
 
+function ConvertTo-WkCoordinate {
+  # A latitude or longitude from a feed, often written as text. $null when blank, not a number,
+  # or 0 (feeds use 0 for "not set").
+  [CmdletBinding()]
+  param([Parameter(Position = 0)][AllowNull()][object]$Value)
+
+  $number = 0.0
+  if ($null -eq $Value -or -not [double]::TryParse("$Value", [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$number)) { return $null }
+  if ($number -eq 0) { return $null }
+  $number
+}
+
+function ConvertTo-WkAddressLine {
+  <#
+  .SYNOPSIS
+    A venue address as one line, "street, town, ST ZIP", from the parts a feed gives. $null
+    without a street, since a town alone says no more than the event's city. A state written
+    out as the city's state name becomes its code.
+  #>
+  [CmdletBinding()]
+  param([string]$Street, [string]$Town, [string]$State, [string]$Zip)
+
+  $Street = ($Street -replace '\s+', ' ').Trim()
+  if (-not $Street) { return $null }
+  $stateInfo = (Get-WkCity).state
+  $State = "$State".Trim()
+  if ($State -eq $stateInfo.name) { $State = $stateInfo.code }
+  $tail = (@($State, "$Zip".Trim()) | Where-Object { $_ }) -join ' '
+  (@($Street, "$Town".Trim(), $tail) | Where-Object { $_ }) -join ', '
+}
+
 function Test-WkNearCity {
   <#
   .SYNOPSIS

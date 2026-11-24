@@ -90,7 +90,9 @@ foreach ($item in ($pages | ForEach-Object { $_._embedded.events } | Where-Objec
     New-WkEvent -Title (ConvertTo-PlainText $item.name) -Start $start -AllDay:$allDay `
       -Venue $venueName -VenueKey $venueKey -City $city `
       -Category $category -InferCategory:([bool]$Source.inferCategory) -Labels $labels -Url $item.url -Description $item.info `
-      -PriceMin $priceMin -Sources @(@{ name = $Source.name; url = $item.url; fetchedAt = $FetchedAt })
+      -PriceMin $priceMin -Sources @(@{ name = $Source.name; url = $item.url; fetchedAt = $FetchedAt }) `
+      -Latitude (ConvertTo-WkCoordinate $venue.location.latitude) -Longitude (ConvertTo-WkCoordinate $venue.location.longitude) `
+      -Address (ConvertTo-WkAddressLine -Street $venue.address.line1 -Town $venue.city.name -State $venue.state.stateCode -Zip $venue.postalCode)
   } catch {
     Write-Warning "$($Source.name): skipping '$($item.name)': $_"
   }

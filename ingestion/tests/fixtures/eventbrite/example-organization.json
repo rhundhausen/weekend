@@ -10,7 +10,7 @@
       "end": { "timezone": "America/Boise", "local": "2026-11-14T12:00:00", "utc": "2026-11-14T19:00:00Z" },
       "status": "live",
       "online_event": false,
-      "venue": { "name": "The Olympic", "address": { "city": "Boise", "region": "ID" } }
+      "venue": { "name": "The Olympic", "latitude": "43.6157", "longitude": "-116.2028", "address": { "address_1": "1009 Main St", "city": "Boise", "region": "ID", "postal_code": "83702" } }
     },
     {
       "id": "1000002",

@@ -26,6 +26,12 @@ Describe 'eventbrite-search adapter' {
     $events.title | Should -Not -Contain 'Managing Your Emotions - Prof Ethan Kross'
   }
 
+  It 'keeps the venue''s address and coordinates' {
+    $event = @($events | Where-Object { $_.location.address -eq '6356 North Glenwood Street #6096, Garden City, ID 83714' })[0]
+    $event.location.lat | Should -Be 43.6602762
+    $event.location.lon | Should -Be -116.2794635
+  }
+
   It 'reads the start and end in Boise time' {
     $event = $events | Where-Object title -eq 'Birding the Park at Expo Idaho'
     $event.start | Should -Be '2026-11-08T08:30:00-07:00'

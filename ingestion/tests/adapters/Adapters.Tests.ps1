@@ -79,6 +79,12 @@ Describe 'tribe adapter' {
     $events.Count | Should -Be 20
   }
 
+  It 'keeps the venue''s address and coordinates' {
+    $events[0].location.address | Should -Be '1118 West Idaho Street, Boise, ID 83702'
+    $events[0].location.lat | Should -Be 43.6175
+    $events[0].location.lon | Should -Be -116.2047
+  }
+
   It 'reads a timed event' {
     $event = $events[0]
     $event.id | Should -Be '0012de5d8722'
@@ -159,6 +165,13 @@ Describe 'eventastic adapter' {
     $events = Invoke-Adapter 'eventastic' $source 'eventastic/visit-mccall.json'
   }
 
+  It 'keeps the address the calendar gives, and adds none when it gives none' {
+    $singo = @($events | Where-Object title -eq 'Friday Night Singo Game')[0]
+    $singo.location.address | Should -Be '311 Village Dr., Tamarack, ID 83615'
+    $evergreen = @($events | Where-Object venue -eq 'Evergreen Hotel')[0]
+    $evergreen.PSObject.Properties.Name | Should -Not -Contain 'location'
+  }
+
   It 'reads a one-day event with its time, venue, and page' {
     $breakfast = @($events | Where-Object title -eq 'Fall Membership Breakfast')
     $breakfast.Count | Should -Be 1
@@ -211,6 +224,12 @@ Describe 'ticketmaster adapter' {
 
   It 'reads every event' {
     $events.Count | Should -Be 17
+  }
+
+  It 'keeps the venue''s coordinates and address' {
+    $events[0].location.lat | Should -Be 43.634102
+    $events[0].location.lon | Should -Be -116.4991
+    $events[0].location.address | Should -Be '16200 Idaho Center Blvd, Nampa, ID 83653'
   }
 
   It 'reads an event' {

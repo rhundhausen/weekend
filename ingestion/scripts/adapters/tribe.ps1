@@ -67,7 +67,9 @@ foreach ($item in ($pages | ForEach-Object { $_.events } | Where-Object { $_ }))
     New-WkEvent -Title $title -Start $start -End $end -AllDay:$allDay `
       -Venue ($name ? $name : $Source.venue) -VenueKey ($name ? (Get-VenueKey $name) : $Source.venueKey) -City $city `
       -Category $Source.category -InferCategory:([bool]$Source.inferCategory) -Labels @($item.categories.name) -Url $url -Description $item.description `
-      -PriceMin (ConvertFrom-WkPriceText (ConvertTo-PlainText $item.cost)) -Sources @(@{ name = $Source.name; url = $url; fetchedAt = $FetchedAt })
+      -PriceMin (ConvertFrom-WkPriceText (ConvertTo-PlainText $item.cost)) -Sources @(@{ name = $Source.name; url = $url; fetchedAt = $FetchedAt }) `
+      -Latitude (ConvertTo-WkCoordinate $venue.geo_lat) -Longitude (ConvertTo-WkCoordinate $venue.geo_lng) `
+      -Address (ConvertTo-WkAddressLine -Street $venue.address -Town $venue.city -State ($venue.stateprovince ? $venue.stateprovince : $venue.state) -Zip $venue.zip)
   } catch {
     Write-Warning "$($Source.name): skipping '$($item.title)': $_"
   }

@@ -343,3 +343,30 @@ Describe 'Test-WkNearCity' {
     Test-WkNearCity -Latitude 40.76 -Longitude -111.89 | Should -BeFalse
   }
 }
+
+Describe 'ConvertTo-WkAddressLine' {
+  It 'joins the parts as street, town, ST ZIP' {
+    ConvertTo-WkAddressLine -Street '1118 West Idaho Street' -Town 'Boise' -State 'ID' -Zip '83702' | Should -Be '1118 West Idaho Street, Boise, ID 83702'
+  }
+
+  It 'writes the state''s name as its code' {
+    ConvertTo-WkAddressLine -Street '1 Main St' -Town 'Boise' -State 'Idaho' | Should -Be '1 Main St, Boise, ID'
+  }
+
+  It 'gives nothing without a street' {
+    ConvertTo-WkAddressLine -Town 'Boise' -State 'ID' -Zip '83702' | Should -BeNullOrEmpty
+  }
+}
+
+Describe 'ConvertTo-WkCoordinate' {
+  It 'reads a number written as text' {
+    ConvertTo-WkCoordinate '-116.499100000' | Should -Be -116.4991
+  }
+
+  It 'gives nothing for blank, zero, or text' {
+    ConvertTo-WkCoordinate '' | Should -BeNullOrEmpty
+    ConvertTo-WkCoordinate '0' | Should -BeNullOrEmpty
+    ConvertTo-WkCoordinate 'n/a' | Should -BeNullOrEmpty
+    ConvertTo-WkCoordinate $null | Should -BeNullOrEmpty
+  }
+}
