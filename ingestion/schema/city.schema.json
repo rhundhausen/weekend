@@ -80,6 +80,19 @@
       "description": "Cities pinned after Other at the end of the site's City list.",
       "items": { "type": "string" }
     },
+    "cityCenters": {
+      "type": "object",
+      "description": "The center of each of the cities, where the map puts an event whose venue it can't place. Each key is one of the cities.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["lat", "lon"],
+        "additionalProperties": false,
+        "properties": {
+          "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+          "lon": { "type": "number", "minimum": -180, "maximum": 180 }
+        }
+      }
+    },
     "coordinates": {
       "type": "object",
       "description": "Where the site's sky theme follows sunrise and sunset.",

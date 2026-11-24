@@ -168,3 +168,32 @@ Describe 'Resolve-WkTitleVenue' {
     Resolve-WkTitleVenue $events | Should -Be 0
   }
 }
+
+Describe 'Read-WkCityFile town centers' {
+  BeforeAll {
+    $script:base = Get-Content (Join-Path $FixtureCity 'city.json') -Raw | ConvertFrom-Json -AsHashtable
+    function Write-City([hashtable]$City) {
+      $path = Join-Path $TestDrive "city-$([guid]::NewGuid().ToString('n')).json"
+      $City | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $path
+      $path
+    }
+  }
+
+  It 'reads a center for each town' {
+    $city = (Read-WkCityFile (Join-Path $FixtureCity 'city.json'))
+    $city.cityCenters['Boise'].lat | Should -Be 43.615
+    @($city.cityCenters.Keys).Count | Should -Be @($city.cities).Count
+  }
+
+  It 'rejects a center for a town that is not one of the cities' {
+    $city = $base.Clone()
+    $city.cityCenters = @{ 'Twin Falls' = @{ lat = 42.56; lon = -114.46 } }
+    { Read-WkCityFile (Write-City $city) } | Should -Throw '*Twin Falls*'
+  }
+
+  It 'reads a city.json with no centers' {
+    $city = $base.Clone()
+    $city.Remove('cityCenters')
+    (Read-WkCityFile (Write-City $city)).cityCenters.Count | Should -Be 0
+  }
+}
