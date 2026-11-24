@@ -2,3 +2,5 @@
 *.sh text eol=lf
 # Fixtures stay byte-exact, so parsers see exactly what a site served.
 ingestion/tests/fixtures/** -text
+# Third-party files stay byte-exact, as published.
+website/assets/vendor/** -text

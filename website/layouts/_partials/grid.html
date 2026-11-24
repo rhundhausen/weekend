@@ -58,10 +58,24 @@
   {{- $costLegend = printf "Cheapest adult ticket, before fees. Free: no charge. $: under %s. $$: %s to under %s. $$$: %s or more. Blank: unknown." $low $low $high $high }}
 {{- end }}
 
-{{- /* A slimmer copy of events.json for the browser: short keys, only the fields the page uses. */}}
+{{- /* A slimmer copy of events.json for the browser: short keys, only the fields the page uses.
+     "l" is the event's map point, [lat, lon, exact]: its venue's from data/venue-locations.json
+     (exact 1, or 0 for a ZIP code's center), else its town's center from city.json cityCenters
+     (exact 0). An event with neither, such as one in Other, has no "l" and stays off the map. */}}
+{{- $venueSpots := index hugo.Data "venue-locations" | default dict }}
+{{- $centers := $city.cityCenters | default dict }}
 {{- $list := slice }}
 {{- range hugo.Data.events }}
-  {{- $list = $list | append (dict
+  {{- $spot := slice }}
+  {{- with index $venueSpots .venueKey }}
+    {{- if and .lat .lon (in (slice "feed" "lookup" "manual" "zip") .from) }}
+      {{- $spot = slice (div (math.Round (mul .lat 100000)) 100000.0) (div (math.Round (mul .lon 100000)) 100000.0) (cond (eq .from "zip") 0 1) }}
+    {{- end }}
+  {{- end }}
+  {{- if not $spot }}
+    {{- with index $centers (.city | default "") }}{{ $spot = slice .lat .lon 0 }}{{ end }}
+  {{- end }}
+  {{- $list = $list | append (merge (cond (gt (len $spot) 0) (dict "l" $spot) dict) (dict
     "t" .title
     "s" .start
     "e" (.end | default "")
@@ -76,7 +90,7 @@
     "u" (.url | default "")
     "d" (.description | default "")
     "r" (apply (.sources | default slice) "index" "." "name")
-  ) }}
+  )) }}
 {{- end }}
 {{- $data := resources.FromString "data/events.json" ($list | jsonify) | fingerprint }}
 {{- /* The first page as app.js first shows it, drawn by the build: the page's category or city,
@@ -106,7 +120,14 @@
 
 {{- $sourceNames := dict }}
 {{- range hugo.Data.sources.sources }}{{ if .name }}{{ $sourceNames = merge $sourceNames (dict .name .displayName) }}{{ end }}{{ end }}
-{{- $cfg := dict "events" $data.RelPermalink "categories" $cats "sizes" $sizes "sizeOrder" $sizeOrder "lastIngest" $lastIngest "sources" $sourceNames "phrases" (hugo.Data.display.phrases | default slice) "tz" $city.timeZone "aliases" ($city.searchAliases | default dict) "state" (slice $city.state.code $city.state.name) "catPaths" $catPaths "cityPaths" $cityPaths "home" (relURL "/") "page" $category "cityPage" $cityPage }}
+{{- /* The map's files, which app.js loads only when Map is first chosen. MapLibre (vendor/maplibre,
+     see website/README.md) finds its worker by setWorkerUrl, so the worker is served from this
+     site and the Content-Security-Policy keeps script-src 'self'. */}}
+{{- $mapLib := resources.Get "vendor/maplibre/maplibre-gl.mjs" | fingerprint }}
+{{- $mapWorker := resources.Get "vendor/maplibre/maplibre-gl-worker.mjs" | fingerprint }}
+{{- $mapCSS := resources.Get "vendor/maplibre/maplibre-gl.css" | fingerprint }}
+{{- $map := dict "maplibre" $mapLib.RelPermalink "worker" $mapWorker.RelPermalink "css" $mapCSS.RelPermalink "center" (slice $city.coordinates.lat $city.coordinates.lon) }}
+{{- $cfg := dict "map" $map "events" $data.RelPermalink "categories" $cats "sizes" $sizes "sizeOrder" $sizeOrder "lastIngest" $lastIngest "sources" $sourceNames "phrases" (hugo.Data.display.phrases | default slice) "tz" $city.timeZone "aliases" ($city.searchAliases | default dict) "state" (slice $city.state.code $city.state.name) "catPaths" $catPaths "cityPaths" $cityPaths "home" (relURL "/") "page" $category "cityPage" $cityPage }}
 
 <header class="top">
   <div class="wrap">
