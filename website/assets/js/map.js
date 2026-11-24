@@ -99,6 +99,10 @@ export async function openMap(container, note, cfg) {
   let points = [];
   let me = null;
   let fitted = false;
+  let popup = null;
+  let styled = false;
+  let failed = false;
+  let count = '';
 
   const map = new ml.Map({
     container,
@@ -177,7 +181,19 @@ export async function openMap(container, note, cfg) {
   }
 
   // Each style load (the first one, and a theme change) needs the events added again.
-  map.on('style.load', addLayers);
+  map.on('style.load', () => {
+    styled = true;
+    if (failed) note.textContent = count;
+    failed = false;
+    addLayers();
+  });
+  // The map's style, tiles, and fonts come from OpenFreeMap. If the style can't be had, say so
+  // instead of leaving an empty panel.
+  map.on('error', () => {
+    if (styled) return;
+    failed = true;
+    note.textContent = 'The map could not load. Try again later, or use List.';
+  });
 
   map.on('click', 'clusters', async (ev) => {
     const feature = ev.features[0];
@@ -194,7 +210,8 @@ export async function openMap(container, note, cfg) {
       const width = Math.max(200, Math.min(320, container.clientWidth - 48));
       const narrow = container.clientWidth < 600;
       if (narrow) map.easeTo({ center: feature.geometry.coordinates, offset: [0, -container.clientHeight * 0.3], duration: 300 });
-      new ml.Popup({ maxWidth: `${width}px`, focusAfterOpen: false, ...(narrow ? { anchor: 'top' } : {}) })
+      popup?.remove();
+      popup = new ml.Popup({ maxWidth: `${width}px`, focusAfterOpen: false, ...(narrow ? { anchor: 'top' } : {}) })
         .setLngLat(feature.geometry.coordinates)
         .setDOMContent(popupContent(group.list, group.exact))
         .addTo(map);
@@ -225,6 +242,9 @@ export async function openMap(container, note, cfg) {
   return {
     // The events the list would show, from app.js render(). Redraws without moving the camera.
     update(events) {
+      // An open popup lists what the old filters showed.
+      popup?.remove();
+      popup = null;
       groups = new Map();
       let placed = 0;
       for (const e of events) {
@@ -240,14 +260,16 @@ export async function openMap(container, note, cfg) {
       points = [...groups.values()];
       const source = map.getSource('events');
       if (source) source.setData(geojson());
-      // The first events set the view, unless the visitor's position already has.
-      if (!fitted) {
+      // The first events set the view, unless the visitor's position already has. An empty first
+      // set (a search that matches nothing) leaves it for the next.
+      if (!fitted && points.length) {
         fitted = true;
         if (!me) fitShown();
       }
       const missing = events.length - placed;
-      note.textContent = `${placed.toLocaleString('en-US')} ${placed === 1 ? 'event' : 'events'} on the map.`
+      count = `${placed.toLocaleString('en-US')} ${placed === 1 ? 'event' : 'events'} on the map.`
         + (missing ? ` ${missing.toLocaleString('en-US')} without a location.` : '');
+      if (!failed) note.textContent = count;
     },
     resize() {
       map.resize();
