@@ -3,7 +3,8 @@
 .SYNOPSIS
   Validates stored events and checks what they refer to.
 .DESCRIPTION
-  Checks data/events.json and data/archive/*.json against the event schema.
+  Checks data/events.json and data/archive/*.json against the event schema, and
+  data/venue-locations.json, when there is one, against its schema.
   Then checks that every category, tag, and source referenced by an event exists. Sources are
   validated by Test-Sources.ps1. Exits non-zero on any failure.
   Categories and tags are the core's vocabulary with the city's additions.
@@ -17,6 +18,7 @@ param(
 )
 
 . (Join-Path $PSScriptRoot 'lib' 'Http.ps1')
+. (Join-Path $PSScriptRoot 'lib' 'VenueLocations.ps1')
 
 $DataRoot = Set-WkCityRoot $CityRoot
 $eventSchema = Get-WkSchemaText event
@@ -61,6 +63,13 @@ foreach ($file in ($files | Where-Object { Test-Path -LiteralPath $_ })) {
   }
 
   if ($failures.Count -eq $before) { Write-Host "OK: $label, $($events.Count) events" }
+}
+
+$venueFile = Join-Path $DataRoot 'data' 'venue-locations.json'
+if (Test-Path -LiteralPath $venueFile) {
+  $problems = @(Test-WkVenueLocationFile $venueFile)
+  foreach ($problem in $problems) { $failures.Add($problem) }
+  if (-not $problems) { Write-Host "OK: data/venue-locations.json" }
 }
 
 if ($failures.Count -gt 0) {
