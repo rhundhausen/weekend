@@ -1,0 +1,58 @@
+# Weekly locate, as a reusable workflow. A city repo's own locate.yml holds only the triggers
+# (a weekly schedule, or by hand) and calls this:
+#
+#   jobs:
+#     weekly:
+#       uses: rhundhausen/weekend/.github/workflows/locate.yml@main
+#
+# It finds the street addresses of venues the map can't place yet, on their events' own pages or
+# in what sources sent, turns them into points with the US Census Bureau geocoder
+# (ingestion/scripts/Invoke-Locate.ps1), and commits data/venue-locations.json, which deploys the
+# site. It never searches by a venue's name. The github context here is the caller's, and the
+# core is checked out into .core/ beside the city's files.
+
+name: locate
+
+on:
+  workflow_call:
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  locate:
+    runs-on: ubuntu-latest
+    # The run stops itself after 45 minutes; committing takes under a minute.
+    timeout-minutes: 60
+    steps:
+      - name: Check out the city
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Check out the core
+        uses: actions/checkout@v5
+        with:
+          repository: rhundhausen/weekend
+          ref: main
+          path: .core
+          fetch-depth: 1
+
+      # No secrets: locate reads public event pages and robots.txt, and asks public geocoders.
+      - name: Locate
+        run: ./.core/ingestion/scripts/Invoke-Locate.ps1
+
+      - name: Upload locate output
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: locate-out
+          path: out
+          if-no-files-found: ignore
+
+      - name: Commit data
+        run: ./.core/ingestion/scripts/Publish-Data.ps1 -Path 'data/venue-locations.json' -Message 'data: locate'

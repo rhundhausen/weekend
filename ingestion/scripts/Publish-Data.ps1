@@ -1,8 +1,8 @@
 #Requires -Version 7.4
 <#
 .SYNOPSIS
-  Commits the given data paths and pushes them, if they changed. Used by the ingest and refine
-  workflows. Run from the city repo's root.
+  Commits the given data paths and pushes them, if they changed. Used by the ingest, refine, and
+  locate workflows. Run from the city repo's root.
 .PARAMETER Path
   The files or folders to commit, relative to the repo root. Nothing else is staged, so each
   workflow commits only the files it owns.
