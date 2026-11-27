@@ -55,4 +55,5 @@ jobs:
           if-no-files-found: ignore
 
       - name: Commit data
-        run: ./.core/ingestion/scripts/Publish-Data.ps1 -Path 'data/venue-locations.json' -Message 'data: locate'
+        run: |
+          ./.core/ingestion/scripts/Publish-Data.ps1 -Path 'data/venue-locations.json' -Message 'data: locate'
