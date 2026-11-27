@@ -322,3 +322,35 @@ Describe 'addresses read from pages are clean' {
     Get-WkPageAddress -Html (New-PlacePage $address) -Venue 'Victory Branch Library' -Title 'x' | Should -Be '15 Smith & Sons Way, Nampa, ID 83686'
   }
 }
+
+Describe 'review fixes' {
+  BeforeAll {
+    function New-LdPage2([object[]]$Nodes) {
+      "<script type=""application/ld+json"">$(ConvertTo-Json -InputObject @($Nodes) -Depth 8)</script>"
+    }
+    function New-LdEvent2([string]$Name, [string]$Place, [string]$Street) {
+      [ordered]@{ '@type' = 'Event'; name = $Name; location = [ordered]@{ '@type' = 'Place'; name = $Place; address = [ordered]@{ streetAddress = $Street; addressLocality = 'Boise'; addressRegion = 'ID'; postalCode = '83702' } } }
+    }
+  }
+
+  It 'takes the same-titled event at this venue, not the first one' {
+    $html = New-LdPage2 @((New-LdEvent2 'Adult Craft Night' 'Bar A' '1 A St'), (New-LdEvent2 'Adult Craft Night' 'Bar B' '2 B St'))
+    Get-WkPageAddress -Html $html -Venue 'Bar B' -Title 'Adult Craft Night' | Should -Be '2 B St, Boise, ID 83702'
+  }
+
+  It 'prefers an exact title over one that only contains it' {
+    $html = New-LdPage2 @((New-LdEvent2 'Open Mic' 'Somewhere' '1 A St'), (New-LdEvent2 'Open Mic Night' 'Elsewhere' '2 B St'))
+    Get-WkPageAddress -Html $html -Venue 'Club Z' -Title 'Open Mic Night' | Should -Be '2 B St, Boise, ID 83702'
+  }
+
+  It 'takes no address from text where another place comes between the venue''s name and it' {
+    $html = '<li>Adult Craft Night at Neurolux, Friday 7 pm</li><li>Baby Rhyme Time at Pengilly''s Saloon, 513 W Main St, Boise, ID 83702</li>'
+    Get-WkPageAddress -Html $html -Venue 'Neurolux' -Title 'Adult Craft Night' | Should -BeNullOrEmpty
+  }
+
+  It 'counts a "too many requests" answer as a failure' {
+    $health = @{}
+    foreach ($i in 1..3) { Find-WkAddressPoint -Address '1 Main St, Boise, ID 83702' -Fetch { param($Url) throw 'HTTP 429 from x' } -Health $health 3>$null | Out-Null }
+    $health.census | Should -Be 3
+  }
+}

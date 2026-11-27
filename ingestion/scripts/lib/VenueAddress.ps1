@@ -125,9 +125,18 @@ function Get-WkPageAddress {
   )
 
   $nodes = @(Get-WkLdNodes $Html)
-  foreach ($node in $nodes) {
-    if (@($node.'@type') -match 'Event$' -and (Test-WkNameMatch "$($node.name)" $Title)) {
+  # Events titled like this one: exact titles first, then ones whose words contain it. When
+  # several share the title (one listing page, many venues), only one at this venue counts.
+  $titleKey = ConvertTo-WkNameKey $Title
+  $events = @($nodes | Where-Object { @($_.'@type') -match 'Event$' })
+  $exact = @($events | Where-Object { (ConvertTo-WkNameKey "$($_.name)") -eq $titleKey -and $titleKey })
+  $loose = @($events | Where-Object { $_ -notin $exact -and (Test-WkNameMatch "$($_.name)" $Title) })
+  foreach ($matched in @($exact, $loose)) {
+    if (-not $matched.Count) { continue }
+    foreach ($node in $matched) {
       foreach ($location in @($node.location)) {
+        $here = $location -isnot [string] -and $null -ne $location -and $location.PSObject.Properties['name'] -and (Test-WkNameMatch "$($location.name)" $Venue)
+        if ($matched.Count -gt 1 -and -not $here) { continue }
         $line = ConvertFrom-WkLdAddress $location
         if ($line) { return $line }
       }
@@ -155,12 +164,14 @@ function Get-WkPageAddress {
     if ($line) { return $line }
   }
 
-  # Text: an address with the venue's name just before it.
+  # Text: an address with the venue's name just before it, at most 30 characters between them, so
+  # on a listing page another place's address is never taken for this one.
   $text = ConvertTo-PlainText ($Html -replace '(?i)<br\s*/?>', ', ')
   $venueKey = ConvertTo-WkNameKey $Venue
   if (-not $venueKey) { return $null }
   foreach ($match in [regex]::Matches($text, (Get-WkAddressRegex))) {
-    $window = $text.Substring([Math]::Max(0, $match.Index - 200), [Math]::Min(200, $match.Index))
+    $size = [Math]::Min($Venue.Length + 30, $match.Index)
+    $window = $text.Substring($match.Index - $size, $size)
     if ((" $(ConvertTo-WkNameKey $window) ").Contains(" $venueKey ")) {
       return ConvertTo-WkAddressLine -Street $match.Groups['street'].Value -Town $match.Groups['town'].Value -State $match.Groups['state'].Value -Zip $match.Groups['zip'].Value
     }
@@ -196,7 +207,7 @@ function Find-WkAddressPoint {
       $Health[$Service] = 0
       , $answer
     } catch {
-      if ("$_" -notmatch 'HTTP 4\d\d') {
+      if ("$_" -notmatch 'HTTP 4(?!29)\d\d') {
         $Health[$Service] = [int]$Health[$Service] + 1
         Write-Warning "$Service request failed: $_"
       }
@@ -343,7 +354,7 @@ function Update-WkVenueAddresses {
   $robots = @{}
   $hostFailures = @{}
   $spent = { $timer.Elapsed.TotalSeconds -ge $BudgetSeconds }
-  $isFailure = { param($err) "$err" -notmatch 'HTTP 4\d\d' }
+  $isFailure = { param($err) "$err" -notmatch 'HTTP 4(?!29)\d\d' }
 
   foreach ($venue in $queue) {
     if (& $spent) { $summary.stoppedEarly = $true; break }
