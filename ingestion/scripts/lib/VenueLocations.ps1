@@ -1,8 +1,8 @@
-# Where each venue is, for the site's map. Refine runs Update-WkVenueLocations after the events
-# are final and keeps the answers in data/venue-locations.json, keyed by venueKey. In order: the
-# location a source sent (New-WkEvent's location), a Nominatim lookup by address or by name and
-# town, and the center of the address's ZIP code. The site puts an event with none of these at
-# its town's center (city.json cityCenters).
+# Where each venue is, for the site's map, kept in data/venue-locations.json keyed by venueKey.
+# Refine (Update-WkVenueLocations) records the locations sources send and marks venues that are not
+# one place; it makes no requests. Locate (VenueAddress.ps1, Invoke-Locate.ps1) finds the street
+# addresses of the rest on their events' pages. The site puts an event with no entry at its town's
+# center (city.json cityCenters).
 
 . "$PSScriptRoot/Http.ps1"
 . "$PSScriptRoot/Schema.ps1"
@@ -39,61 +39,50 @@ function Get-WkNominatimBox {
     ForEach-Object { ([Math]::Round($_, 3)).ToString($invariant) }) -join ','
 }
 
+function Get-WkStreetOnlyPattern {
+  # A venue name that is only a street address ("7497 W Whisper Rdg Dr"). Such a venue is most
+  # often someone's home (an estate sale, a class in a living room), so it stays at its town's
+  # center and its address is not kept.
+  '^\s*\d+[A-Za-z]?\s+.*\b(St|Street|Rd|Road|Dr|Drive|Ave|Avenue|Ln|Lane|Way|Ct|Court|Pl|Place|Blvd|Boulevard|Cir|Circle|Loop|Trl|Trail|Pkwy|Parkway|Hwy|Highway|Ter|Terrace)\.?\s*(,.*)?$'
+}
+
 function Update-WkVenueLocations {
   <#
   .SYNOPSIS
-    Brings the venue location state up to date for the venues of -Events. Returns the state and
-    counts (Looked: venues looked up, Found: of those, found; Feed: entries set from sources).
+    Refine's part of the venue location state: what sources sent, and which venues are not one
+    place. It makes no requests; locate (Invoke-Locate.ps1) finds addresses for the rest. Returns
+    the state and Feed, the entries set from sources.
   .DESCRIPTION
     A manual entry is never changed. A venue a raw event has coordinates for takes the point
-    reported most often, ties going to the first reported, and keeps a feed point it has even when
-    its events name two towns (sources disagree about towns more than about points). Otherwise a
-    placeholder venue (Get-WkPlaceholderVenues) is marked so and never looked up; once it no
-    longer is one, it is looked up again. Any other venue with no entry, or a none entry checked
-    30 days ago or more, is looked up: by the source's address when there is one, else by
-    "venue, town, state". An answer must fall within 150 miles of the city (Test-WkNearCity) and
-    be a place, not a whole town, county, or ZIP code. With no answer, an address's ZIP code is
-    looked up. Requests are at least MinDelaySeconds apart, at most MaxLookups per run, and
-    stop when BudgetSeconds have passed or after three failures in a row; a failed request warns
-    and leaves the entry as it was. Entries of venues with no events now are kept, since venues
-    come back.
+    reported most often, ties going to the first reported, and replaces any entry but manual (a
+    source's own location is taken as correct), even when its events name two towns. Otherwise a
+    placeholder venue (Get-WkPlaceholderVenues, or a name that is only a street address) is marked
+    so, unless it has a feed point; a placeholder entry whose venue is now one place is removed, so
+    locate takes it up. Every other entry is locate's and is left alone. Entries of venues with no
+    events now are kept, since venues come back.
   .PARAMETER RawEvents
     The raw events, whose location field holds what sources sent.
   .PARAMETER State
     venueKey to entry (lat, lon, address, from, checked). Updated in place.
-  .PARAMETER Fetch
-    Returns Nominatim's parsed answer for a URL, or throws. Defaults to Invoke-WkRequest. Used by tests.
   #>
   [CmdletBinding()]
   param(
     [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$RawEvents,
     [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Events,
     [Parameter(Mandatory)][hashtable]$State,
-    [Parameter(Mandatory)][DateTimeOffset]$Now,
-    [int]$MaxLookups = 300,
-    [int]$BudgetSeconds = 300,
-    [double]$MinDelaySeconds = 1,
-    [scriptblock]$Fetch = { param([string]$Url) Invoke-WkRequest $Url -TimeoutSec 10 }
+    [Parameter(Mandatory)][DateTimeOffset]$Now
   )
 
   $invariant = [Globalization.CultureInfo]::InvariantCulture
   $today = $Now.UtcDateTime.ToString('yyyy-MM-dd', $invariant)
-  $retryBefore = $Now.UtcDateTime.AddDays(-30).ToString('yyyy-MM-dd', $invariant)
-  $counts = @{ Looked = 0; Found = 0; Feed = 0 }
-  # Requests so far and when the last one ended, shared with $ask.
-  $clock = @{ requests = 0; last = $null; failures = 0 }
-  $timer = [Diagnostics.Stopwatch]::StartNew()
-  $spent = { $clock.requests -ge $MaxLookups -or $timer.Elapsed.TotalSeconds -ge $BudgetSeconds -or $clock.failures -ge 3 }
+  $feed = 0
 
-  # What sources sent, by venue: each point with how often it was reported, and the first address.
+  # What sources sent, by venue: each point with how often it was reported, and its first address.
   $points = @{}
-  $addresses = @{}
   foreach ($raw in $RawEvents) {
     $location = $raw.location
-    if (-not $location) { continue }
+    if (-not $location -or $null -eq $location.lat -or $null -eq $location.lon) { continue }
     $key = "$($raw.venueKey)"
-    if ($location.address -and -not $addresses.ContainsKey($key)) { $addresses[$key] = "$($location.address)" }
-    if ($null -eq $location.lat -or $null -eq $location.lon) { continue }
     if (-not $points.ContainsKey($key)) { $points[$key] = [ordered]@{} }
     $pair = '{0},{1}' -f ([double]$location.lat).ToString($invariant), ([double]$location.lon).ToString($invariant)
     if (-not $points[$key].Contains($pair)) { $points[$key][$pair] = [ordered]@{ count = 0; address = $null } }
@@ -101,49 +90,16 @@ function Update-WkVenueLocations {
     if ($location.address -and -not $points[$key][$pair].address) { $points[$key][$pair].address = "$($location.address)" }
   }
 
-  # Each venue's town: the one most of its events name.
-  $towns = @{}
-  foreach ($event in $Events) {
-    $key = "$($event.venueKey)"
-    if (-not $towns.ContainsKey($key)) { $towns[$key] = @{ venue = "$($event.venue)"; cities = @{} } }
-    if ($event.city -and $event.city -ne 'Other') { $towns[$key].cities["$($event.city)"] = 1 + [int]$towns[$key].cities["$($event.city)"] }
-  }
+  $names = @{}
+  foreach ($event in $Events) { if (-not $names.ContainsKey("$($event.venueKey)")) { $names["$($event.venueKey)"] = "$($event.venue)" } }
   $placeholders = @(Get-WkPlaceholderVenues $Events)
-  $stateName = (Get-WkCity).state.name
-  $box = Get-WkNominatimBox
+  $streetOnly = Get-WkStreetOnlyPattern
 
-  # A town, county, or ZIP code is where a venue is, not the venue: a lookup of "Downtown Boise"
-  # answers with Boise itself.
-  $streetOnly = '^\s*\d+[A-Za-z]?\s+.*\b(St|Street|Rd|Road|Dr|Drive|Ave|Avenue|Ln|Lane|Way|Ct|Court|Pl|Place|Blvd|Boulevard|Cir|Circle|Loop|Trl|Trail|Pkwy|Parkway|Hwy|Highway|Ter|Terrace)\.?\s*(,.*)?$'
-  $areaTypes = @('city', 'town', 'village', 'hamlet', 'municipality', 'county', 'state', 'region', 'postcode', 'country')
-  $ask = {
-    param([string]$Query, [switch]$Area)
-    if ($null -ne $clock.last) {
-      $wait = $MinDelaySeconds - ([DateTime]::UtcNow - $clock.last).TotalSeconds
-      if ($wait -gt 0) { Start-Sleep -Milliseconds ([int]($wait * 1000)) }
-    }
-    $clock.requests++
-    try {
-      $answer = @(& $Fetch "$($script:WkNominatimSearch)?format=jsonv2&limit=1&countrycodes=us&$Query")
-    } finally {
-      $clock.last = [DateTime]::UtcNow
-    }
-    foreach ($place in $answer) {
-      if (-not $Area -and "$($place.addresstype)" -in $areaTypes) { continue }
-      $lat = ConvertTo-WkCoordinate $place.lat
-      $lon = ConvertTo-WkCoordinate $place.lon
-      if ($null -ne $lat -and $null -ne $lon -and (Test-WkNearCity -Latitude $lat -Longitude $lon)) { return @($lat, $lon) }
-    }
-    $null
-  }
-
-  foreach ($key in ($towns.Keys | Sort-Object)) {
+  foreach ($key in ($names.Keys | Sort-Object)) {
     $entry = $State[$key]
     if ($entry -and $entry.from -eq 'manual') { continue }
 
-    # A venue named only by a street address is most often someone's home (an estate sale, a
-    # class in a living room), so it stays at its town's center and its address is not kept.
-    $named = $key -like 'various-*' -or $key -like '*-area' -or $towns[$key].venue -match $streetOnly
+    $named = $key -like 'various-*' -or $key -like '*-area' -or $names[$key] -match $streetOnly
     if ($named -or ($key -in $placeholders -and -not $points.ContainsKey($key) -and -not ($entry -and $entry.from -eq 'feed'))) {
       if (-not $entry -or $entry.from -ne 'placeholder') { $State[$key] = [ordered]@{ from = 'placeholder'; checked = $today } }
       continue
@@ -162,46 +118,15 @@ function Update-WkVenueLocations {
         $new.from = 'feed'
         $new.checked = $today
         $State[$key] = $new
-        $counts.Feed++
+        $feed++
       }
       continue
     }
 
-    $due = -not $entry -or $entry.from -eq 'placeholder' -or ($entry.from -eq 'none' -and "$($entry.checked)" -le $retryBefore)
-    if (-not $due -or (& $spent)) { continue }
-
-    $address = $addresses[$key]
-    $town = @($towns[$key].cities.GetEnumerator() | Sort-Object -Property @{ Expression = 'Value'; Descending = $true }, Name | Select-Object -First 1).Name
-    $text = if ($address) { $address } else { (@($towns[$key].venue, $town, $stateName) | Where-Object { $_ }) -join ', ' }
-    $counts.Looked++
-    try {
-      $from = 'lookup'
-      $found = & $ask "bounded=1&viewbox=$box&q=$([uri]::EscapeDataString($text))"
-      $zip = if ($address -match '\b(\d{5})(?:-\d{4})?\s*$') { $Matches[1] }
-      if (-not $found -and $zip -and -not (& $spent)) {
-        $from = 'zip'
-        $found = & $ask "postalcode=$zip&country=us" -Area
-      }
-      $clock.failures = 0
-      $new = [ordered]@{}
-      if ($found) {
-        $new.lat = $found[0]
-        $new.lon = $found[1]
-        if ($from -eq 'lookup') { $counts.Found++ }
-      } else {
-        $from = 'none'
-      }
-      if ($address) { $new.address = $address }
-      $new.from = $from
-      $new.checked = $today
-      $State[$key] = $new
-    } catch {
-      $clock.failures++
-      Write-Warning "venue lookup for '$($towns[$key].venue)' failed: $_"
-    }
+    if ($entry -and $entry.from -eq 'placeholder') { $State.Remove($key) }
   }
 
-  @{ State = $State; Looked = $counts.Looked; Found = $counts.Found; Feed = $counts.Feed }
+  @{ State = $State; Feed = $feed }
 }
 
 function Read-WkVenueLocationState {

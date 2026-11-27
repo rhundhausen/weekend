@@ -15,30 +15,13 @@ BeforeAll {
     [pscustomobject]@{ venueKey = $Key; location = $location }
   }
 
-  # Answers by URL fragment: the first key found in the URL wins; anything else answers no
-  # results. Every requested URL is recorded in $script:calls.
-  function New-Fetcher([hashtable]$Answers = @{}, [switch]$Throw) {
-    $script:calls = [Collections.Generic.List[string]]::new()
-    $list = $script:calls
-    $fail = [bool]$Throw
-    {
-      param([string]$Url)
-      $list.Add($Url)
-      if ($fail) { throw 'service unavailable' }
-      foreach ($key in $Answers.Keys) { if ($Url -like "*$key*") { return , @($Answers[$key]) } }
-      , @()
-    }.GetNewClosure()
+  function Invoke-Update($Events, $Raw = @(), $State = @{}) {
+    Update-WkVenueLocations -RawEvents $Raw -Events $Events -State $State -Now $now
   }
-
-  function Invoke-Update($Events, $Raw = @(), $State = @{}, $Fetch = (New-Fetcher), [int]$Max = 300, [int]$Budget = 300) {
-    Update-WkVenueLocations -RawEvents $Raw -Events $Events -State $State -Now $now -MaxLookups $Max -BudgetSeconds $Budget -MinDelaySeconds 0 -Fetch $Fetch
-  }
-
-  $script:boise = [pscustomobject]@{ lat = '43.6187'; lon = '-116.2146'; display_name = 'Somewhere, Boise' }
 }
 
 Describe 'Update-WkVenueLocations' {
-  It 'uses the source''s location without a lookup' {
+  It 'uses the source''s location' {
     $result = Invoke-Update @(New-Stored 'morrison-center') @(New-Raw 'morrison-center' 43.6033 -116.2012 '2201 W Cesar Chavez Ln, Boise, ID 83725')
     $entry = $result.State['morrison-center']
     $entry.from | Should -Be 'feed'
@@ -46,7 +29,6 @@ Describe 'Update-WkVenueLocations' {
     $entry.lon | Should -Be -116.2012
     $entry.address | Should -Be '2201 W Cesar Chavez Ln, Boise, ID 83725'
     $entry.checked | Should -Be '2026-11-23'
-    $calls.Count | Should -Be 0
     $result.Feed | Should -Be 1
   }
 
@@ -65,7 +47,11 @@ Describe 'Update-WkVenueLocations' {
     $entry.checked | Should -Be '2026-01-01'
   }
 
-  It 'marks placeholder venues and looks none of them up' {
+  It 'has no way to make requests' {
+    (Get-Command Update-WkVenueLocations).Parameters.Keys | Should -Not -Contain 'Fetch'
+  }
+
+  It 'marks placeholder venues' {
     $events = @(
       (New-Stored 'various-treasure-valley' 'Various locations' 'Boise'),
       (New-Stored 'mccall-area' 'McCall area' 'Valley County'),
@@ -74,90 +60,54 @@ Describe 'Update-WkVenueLocations' {
     )
     $state = (Invoke-Update $events).State
     foreach ($key in 'various-treasure-valley', 'mccall-area', 'corbett-auctions') { $state[$key].from | Should -Be 'placeholder' }
-    $calls.Count | Should -Be 0
   }
 
   It 'keeps a venue named only by a street address at town level, even with a source''s point' {
     $events = @(New-Stored '7497-w-whisper-rdg-dr' '7497 W Whisper Rdg Dr' 'Boise')
     $raw = @(New-Raw '7497-w-whisper-rdg-dr' 43.61 -116.31 '7497 W Whisper Rdg Dr, Boise, ID 83709')
-    $entry = (Invoke-Update $events $raw -Fetch (New-Fetcher @{ 'q=' = $boise })).State['7497-w-whisper-rdg-dr']
+    $entry = (Invoke-Update $events $raw).State['7497-w-whisper-rdg-dr']
     $entry.from | Should -Be 'placeholder'
     $entry.Keys | Should -Not -Contain 'address'
     $entry.Keys | Should -Not -Contain 'lat'
-    $calls.Count | Should -Be 0
   }
 
-  It 'looks up a venue whose name only starts with a number' {
-    (Invoke-Update @(New-Stored '10-barrel' '10 Barrel Brewing' 'Boise') -Fetch (New-Fetcher @{ 'q=' = $boise })).State['10-barrel'].from | Should -Be 'lookup'
+  It 'does not take a venue whose name only starts with a number for a street address' {
+    (Invoke-Update @(New-Stored '10-barrel' '10 Barrel Brewing' 'Boise')).State.ContainsKey('10-barrel') | Should -BeFalse
   }
 
   It 'does not count Other as a second town' {
     $events = @((New-Stored 'star-library'), (New-Stored 'star-library' 'Star Library' 'Other'))
-    (Invoke-Update $events -Fetch (New-Fetcher @{ 'q=' = $boise })).State['star-library'].from | Should -Be 'lookup'
+    (Invoke-Update $events).State.ContainsKey('star-library') | Should -BeFalse
   }
 
-  It 'looks a venue up by name, town, and state' {
-    $result = Invoke-Update @(New-Stored 'star-library') -Fetch (New-Fetcher @{ 'q=' = $boise })
-    $entry = $result.State['star-library']
-    $entry.from | Should -Be 'lookup'
-    $entry.lat | Should -Be 43.6187
-    $entry.lon | Should -Be -116.2146
-    $calls[0] | Should -BeLike 'https://nominatim.openstreetmap.org/search?*'
-    $calls[0] | Should -BeLike '*q=Star%20Library%2C%20Star%2C%20Idaho*'
-    $calls[0] | Should -BeLike '*bounded=1*'
-    $result.Looked | Should -Be 1
-    $result.Found | Should -Be 1
+  It 'leaves a venue with no point for locate' {
+    $result = Invoke-Update @(New-Stored 'star-library')
+    $result.State.ContainsKey('star-library') | Should -BeFalse
+    $result.Feed | Should -Be 0
   }
 
-  It 'looks a venue up by the source''s address when the source sent no point' {
-    Invoke-Update @(New-Stored 'v') @(New-Raw 'v' $null $null '1 Main St, Boise, ID 83702') -Fetch (New-Fetcher @{ 'q=' = $boise }) | Out-Null
-    $calls[0] | Should -BeLike '*q=1%20Main%20St%2C%20Boise%2C%20ID%2083702*'
+  It 'removes a placeholder entry once the venue is one place' {
+    $state = @{ 'v' = [ordered]@{ from = 'placeholder'; checked = '2026-11-20' } }
+    (Invoke-Update @(New-Stored 'v' 'V Hall') -State $state).State.ContainsKey('v') | Should -BeFalse
   }
 
-  It 'rejects an answer far from the city' {
-    $slc = [pscustomobject]@{ lat = '40.76'; lon = '-111.89' }
-    (Invoke-Update @(New-Stored 'star-library') -Fetch (New-Fetcher @{ 'q=' = $slc })).State['star-library'].from | Should -Be 'none'
+  It 'replaces a page entry with a source''s point' {
+    $state = @{ v = [ordered]@{ lat = 43.5; lon = -116.1; address = '1 Main St, Boise, ID 83702'; from = 'page'; checked = '2026-11-01' } }
+    $entry = (Invoke-Update @(New-Stored 'v') @(New-Raw 'v' 43.60 -116.20) $state).State['v']
+    $entry.from | Should -Be 'feed'
+    $entry.lat | Should -Be 43.60
   }
 
-  It 'tries a venue with no answer again after 30 days' {
-    $state = @{ a = [ordered]@{ from = 'none'; checked = '2026-10-25' }; b = [ordered]@{ from = 'none'; checked = '2026-10-24' } }
-    Invoke-Update @((New-Stored 'a' 'A Hall'), (New-Stored 'b' 'B Hall')) -State $state | Out-Null
-    $calls.Count | Should -Be 1
-    $calls[0] | Should -BeLike '*q=B%20Hall*'
-  }
-
-  It 'falls back to the ZIP code of the source''s address' {
-    $result = Invoke-Update @(New-Stored 'v') @(New-Raw 'v' $null $null '9 Nowhere Rd, Boise, ID 83702') -Fetch (New-Fetcher @{ 'postalcode=83702' = $boise })
-    $calls.Count | Should -Be 2
-    $calls[1] | Should -BeLike '*postalcode=83702*'
-    $calls[1] | Should -Not -BeLike '*q=*'
-    $result.State['v'].from | Should -Be 'zip'
-    $result.State['v'].address | Should -Be '9 Nowhere Rd, Boise, ID 83702'
-  }
-
-  It 'stops after the most lookups a run may make' {
-    $events = @('a', 'b', 'c', 'd', 'e' | ForEach-Object { New-Stored $_ "$_ Hall" })
-    $state = (Invoke-Update $events -Max 2).State
-    $calls.Count | Should -Be 2
-    @($state.Keys).Count | Should -Be 2
-  }
-
-  It 'keeps the entry when the lookup fails' {
-    $state = @{ v = [ordered]@{ from = 'none'; checked = '2026-01-01' } }
-    $result = Invoke-Update @(New-Stored 'v') -State $state -Fetch (New-Fetcher -Throw) 3>$null
-    $result.State['v'].checked | Should -Be '2026-01-01'
-  }
-
-  It 'stops when its time is spent' {
-    $events = @('a', 'b', 'c' | ForEach-Object { New-Stored $_ "$_ Hall" })
-    Invoke-Update $events -Budget 0 | Out-Null
-    $calls.Count | Should -Be 0
-  }
-
-  It 'stops after three failed lookups in a row' {
-    $events = @('a', 'b', 'c', 'd', 'e' | ForEach-Object { New-Stored $_ "$_ Hall" })
-    Invoke-Update $events -Fetch (New-Fetcher -Throw) 3>$null | Out-Null
-    $calls.Count | Should -Be 3
+  It 'leaves entries locate wrote alone' {
+    $state = @{}
+    foreach ($from in 'page', 'address', 'zip', 'lookup') { $state[$from] = [ordered]@{ lat = 43.5; lon = -116.1; from = $from; checked = '2026-11-01' } }
+    $state['none'] = [ordered]@{ from = 'none'; checked = '2026-11-01' }
+    $events = @('page', 'address', 'zip', 'lookup', 'none' | ForEach-Object { New-Stored $_ "$_ Hall" })
+    $after = (Invoke-Update $events -State $state).State
+    foreach ($from in 'page', 'address', 'zip', 'lookup', 'none') {
+      $after[$from].from | Should -Be $from
+      $after[$from].checked | Should -Be '2026-11-01'
+    }
   }
 
   It 'keeps a source''s point for a venue whose events name two towns' {
@@ -171,17 +121,6 @@ Describe 'Update-WkVenueLocations' {
     $events = @((New-Stored 'expo-idaho' 'Expo Idaho' 'Boise'), (New-Stored 'expo-idaho' 'Expo Idaho' 'Garden City'))
     $state = @{ 'expo-idaho' = [ordered]@{ lat = 43.65; lon = -116.28; from = 'feed'; checked = '2026-11-01' } }
     (Invoke-Update $events -State $state).State['expo-idaho'].from | Should -Be 'feed'
-  }
-
-  It 'looks up a venue marked as several places once its events are in one town' {
-    $state = @{ 'v' = [ordered]@{ from = 'placeholder'; checked = '2026-11-20' } }
-    $result = Invoke-Update @(New-Stored 'v' 'V Hall') -State $state -Fetch (New-Fetcher @{ 'q=' = $boise })
-    $result.State['v'].from | Should -Be 'lookup'
-  }
-
-  It 'does not take a whole town as a venue''s place' {
-    $town = [pscustomobject]@{ lat = '43.6166'; lon = '-116.2008'; addresstype = 'city'; category = 'boundary'; type = 'administrative' }
-    (Invoke-Update @(New-Stored 'downtown-boise' 'Downtown Boise' 'Boise') -Fetch (New-Fetcher @{ 'q=' = $town })).State['downtown-boise'].from | Should -Be 'none'
   }
 
   It 'keeps entries for venues with no events now' {

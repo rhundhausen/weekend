@@ -16,8 +16,9 @@
     Website link points to (lib/CityLookup.ps1), unless -SkipCityLookup, remembering what it
     found in city-lookup.json;
   - keeps where each venue is in venue-locations.json for the site's map (lib/VenueLocations.ps1):
-    the location sources sent, else a lookup unless -SkipVenueLookup. The events themselves
-    never store a location;
+    the location sources sent, and which venues are not one place. It makes no requests; the
+    weekly locate run (Invoke-Locate.ps1) finds the other venues' addresses. The events
+    themselves never store a location;
   - re-cleans every archive month the same way, and appends past events to it;
   - runs the link check (lib/Links.ps1), unless -SkipLinkCheck, and marks events whose link is
     gone with linkBroken;
@@ -38,14 +39,6 @@
   Make no link requests. Known link results from links.json still apply. -NoWrite implies it.
 .PARAMETER SkipCityLookup
   Read no pages to find cities. Cities already in city-lookup.json still apply. -NoWrite implies it.
-.PARAMETER SkipVenueLookup
-  Look up no venues. Locations sources sent, and ones already in venue-locations.json, still
-  apply. -NoWrite implies it.
-.PARAMETER VenueLookups
-  The most venue lookup requests one run may make. Venues left over wait for a later run.
-.PARAMETER VenueBudgetSeconds
-  How long the venue lookup may spend. It also stops after three failed requests in a row, so a
-  slow or down lookup service costs a few minutes, never the night's refine.
 .PARAMETER CityBudgetSeconds
   How long the city lookup may spend making requests. Pages left over wait for a later run.
 .PARAMETER NoWrite
@@ -69,9 +62,6 @@ param(
   [string]$OutputPath,
   [switch]$SkipLinkCheck,
   [switch]$SkipCityLookup,
-  [switch]$SkipVenueLookup,
-  [int]$VenueLookups = 200,
-  [int]$VenueBudgetSeconds = 300,
   [switch]$NoWrite,
   [string]$OutDir = './out',
   [int]$Days = 365,
@@ -180,15 +170,9 @@ $lookup = try {
   [pscustomobject]@{ State = $cityState; Others = 0; Pages = 0; Requests = 0; Found = 0; Errors = @("$_") }
 }
 
-# Where each upcoming event's venue is. A lookup failure only warns, like the city lookup.
+# Where each upcoming event's venue is, as far as sources say. No requests: locate does the rest.
 $venueState = Read-WkVenueLocationState $venueLocationsPath
-$venueMax = if ($SkipVenueLookup -or $NoWrite) { 0 } else { $VenueLookups }
-$venues = try {
-  Update-WkVenueLocations -RawEvents $rawLocations -Events $upcoming -State $venueState -Now $Now -MaxLookups $venueMax -BudgetSeconds $VenueBudgetSeconds
-} catch {
-  Write-Warning "Venue lookup failed, venues keep their stored locations: $_"
-  @{ State = $venueState; Looked = 0; Found = 0; Feed = 0 }
-}
+$venues = Update-WkVenueLocations -RawEvents $rawLocations -Events $upcoming -State $venueState -Now $Now
 
 # Check the links that are due, then mark every upcoming event from what is known.
 $linkState = Read-WkLinkState $linksPath
@@ -248,11 +232,8 @@ $report = [ordered]@{
     found    = $lookup.Found
     errors   = @($lookup.Errors)
   }
-  venueLookup = [ordered]@{
-    skipped = [bool]($SkipVenueLookup -or $NoWrite)
-    looked  = $venues.Looked
-    found   = $venues.Found
-    feed    = $venues.Feed
+  venueLocations = [ordered]@{
+    feed = $venues.Feed
   }
   # Upcoming events per tier, so each run's email shows what the breakpoints do.
   costTiers   = Get-WkCostTierCounts $upcoming

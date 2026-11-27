@@ -28,7 +28,7 @@ BeforeAll {
   function Invoke-TestRefine {
     param([hashtable]$Options = @{})
     $null = & $refine -InputPath $script:rawPath -OutputPath $script:eventsPath -SourcesPath $script:sourcesPath `
-      -OutDir (Join-Path $script:dir 'out') -Now $now -SkipLinkCheck -SkipCityLookup -SkipVenueLookup @Options *>&1
+      -OutDir (Join-Path $script:dir 'out') -Now $now -SkipLinkCheck -SkipCityLookup @Options *>&1
   }
 }
 
@@ -192,14 +192,14 @@ Describe 'Invoke-Refine' {
     (Get-Content (Join-Path $dir 'archive' '2026-11.json') -Raw) | Should -Not -Match '"location"'
   }
 
-  It 'looks nothing up with -SkipVenueLookup, and says so in the run report' {
-    Write-TestRaw @{ beta = @(New-TestEvent) }
+  It 'leaves a venue with no source location for locate, and reports the venues sources placed' {
+    $here = @{ Latitude = 43.6033; Longitude = -116.2012 }
+    Write-TestRaw @{ beta = @((New-TestEvent), (New-TestEvent -Title 'Gala' -Url 'https://beta.test/gala' -Location $here)) }
     Invoke-TestRefine
-    $venues = Get-Content (Join-Path $dir 'venue-locations.json') -Raw | ConvertFrom-Json -DateKind String
-    $venues.PSObject.Properties.Name | Should -Not -Contain 'hall'
     $report = Get-Content (Join-Path $dir 'out' 'refine.json') -Raw | ConvertFrom-Json -DateKind String
-    $report.venueLookup.skipped | Should -BeTrue
-    $report.venueLookup.looked | Should -Be 0
+    $report.PSObject.Properties.Name | Should -Not -Contain 'venueLookup'
+    $report.venueLocations.feed | Should -Be 1
+    (Get-Command $refine).Parameters.Keys | Should -Not -Contain 'SkipVenueLookup'
   }
 
   It 'writes nothing with -NoWrite' {
