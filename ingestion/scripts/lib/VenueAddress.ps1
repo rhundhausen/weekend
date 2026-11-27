@@ -54,16 +54,40 @@ function ConvertFrom-WkAddressText {
   ConvertTo-WkAddressLine -Street $match.Groups['street'].Value -Town $match.Groups['town'].Value -State $match.Groups['state'].Value -Zip $match.Groups['zip'].Value
 }
 
+function Repair-WkAddressLine {
+  <#
+  .SYNOPSIS
+    An address line as pages really write them, made tidy: entities decoded, a country, empty
+    parts, and repeated parts dropped ("6427 W Ustick Rd,, Boise, ID, Boise, ID" becomes "6427 W
+    Ustick Rd, Boise, ID"), and a full address inside it taken as written. $null unless it starts
+    with a house number, since "Boise, ID" is a town, not a venue's address.
+  #>
+  param([AllowEmptyString()][AllowNull()][string]$Line)
+  $text = [Net.WebUtility]::HtmlDecode("$Line") -replace '\s+', ' '
+  $full = ConvertFrom-WkAddressText $text
+  if ($full) { return $full }
+  $parts = [Collections.Generic.List[string]]::new()
+  foreach ($part in ($text -split ',')) {
+    $part = $part.Trim()
+    if (-not $part -or $part -match '^(USA|US|United States( of America)?)$') { continue }
+    if ($parts -notcontains $part) { $parts.Add($part) }
+  }
+  if (-not $parts.Count -or $parts[0] -notmatch '^\d') { return $null }
+  $parts -join ', '
+}
+
 function ConvertFrom-WkLdAddress {
   # The address line of a schema.org location (a Place, or an address object or string).
   param($Location)
   if ($null -eq $Location) { return $null }
   $address = if ($Location -is [string]) { $Location } elseif ($Location.PSObject.Properties['address']) { $Location.address } else { $Location }
   if ($address -is [array]) { $address = @($address)[0] }
-  if ($address -is [string]) { return ConvertFrom-WkAddressText $address }
+  if ($address -is [string]) { return Repair-WkAddressLine $address }
   if ($null -eq $address -or -not $address.PSObject.Properties['streetAddress']) { return $null }
-  $region = "$($address.addressRegion)"
-  ConvertTo-WkAddressLine -Street "$($address.streetAddress)" -Town "$($address.addressLocality)" -State $region -Zip "$($address.postalCode)"
+  $street = [Net.WebUtility]::HtmlDecode("$($address.streetAddress)")
+  $full = ConvertFrom-WkAddressText $street
+  if ($full) { return $full }
+  Repair-WkAddressLine (ConvertTo-WkAddressLine -Street ($street.Trim().TrimEnd(',')) -Town "$($address.addressLocality)" -State "$($address.addressRegion)" -Zip "$($address.postalCode)")
 }
 
 function Get-WkLdNodes {
@@ -127,7 +151,7 @@ function Get-WkPageAddress {
     if (-not $names.Count -or -not (Test-WkNameMatch (ConvertTo-PlainText $names[$names.Count - 1].Groups[1].Value) $Venue)) { continue }
     $after = $Html.Substring($street.Index, [Math]::Min(800, $Html.Length - $street.Index))
     $part = { param($name) $m = [regex]::Match($after, "(?is)itemprop=""$name""[^>]*>(.*?)</"); if ($m.Success) { ConvertTo-PlainText $m.Groups[1].Value } }
-    $line = ConvertTo-WkAddressLine -Street (ConvertTo-PlainText $street.Groups[1].Value) -Town (& $part 'addressLocality') -State (& $part 'addressRegion') -Zip (& $part 'postalCode')
+    $line = Repair-WkAddressLine (ConvertTo-WkAddressLine -Street (ConvertTo-PlainText $street.Groups[1].Value) -Town (& $part 'addressLocality') -State (& $part 'addressRegion') -Zip (& $part 'postalCode'))
     if ($line) { return $line }
   }
 
@@ -217,4 +241,179 @@ function Find-WkAddressPoint {
     }
   }
   $null
+}
+
+function Update-WkVenueAddresses {
+  <#
+  .SYNOPSIS
+    Locate's pass over the venues: finds street addresses on events' own pages, or in what
+    sources sent, and turns them into points. Returns @{ State; Summary }.
+  .DESCRIPTION
+    Works on venues of -Events whose entry is missing, none, zip, or lookup (the old name
+    search), and page or address entries checked 90 days ago or more; never manual, feed, or
+    placeholder entries, nor a venue named only by a street address. Busiest venues first.
+
+    For each, it reads up to -MaxPagesPerVenue of its events' pages (never google.com, only where
+    robots.txt allows) and takes the address most of them give (Get-WkPageAddress), ties to the
+    first; else the address a source sent. Find-WkAddressPoint turns it into a point. An answer
+    replaces the entry unless it is worse than a point the entry already has: finding nothing
+    keeps a page, address, lookup, or zip entry and only updates checked.
+
+    Requests to one host are at least -MinDelaySeconds apart. A host or a geocoding service that
+    fails three times in a row (a timeout, a connection error, a 5xx) is skipped for the rest of
+    the run. The run stops when -BudgetSeconds have passed.
+  .PARAMETER Fetch
+    Gets a URL: with -Raw the body as text, otherwise parsed JSON; throws on failure. Defaults to
+    Invoke-WkRequest. Used by tests.
+  #>
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Events,
+    [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$RawEvents,
+    [Parameter(Mandatory)][hashtable]$State,
+    [Parameter(Mandatory)][DateTimeOffset]$Now,
+    [int]$BudgetSeconds = 2700,
+    [int]$MaxPagesPerVenue = 3,
+    [double]$MinDelaySeconds = 1,
+    [scriptblock]$Fetch = { param([string]$Url, [switch]$Raw) Invoke-WkRequest $Url -Raw:$Raw -TimeoutSec 15 }
+  )
+
+  $invariant = [Globalization.CultureInfo]::InvariantCulture
+  $today = $Now.UtcDateTime.ToString('yyyy-MM-dd', $invariant)
+  $recheckBefore = $Now.UtcDateTime.AddDays(-90).ToString('yyyy-MM-dd', $invariant)
+  $timer = [Diagnostics.Stopwatch]::StartNew()
+  $summary = [ordered]@{
+    tried = 0; pages = 0; robotsSkipped = 0
+    found = [ordered]@{ page = 0; address = 0; zip = 0 }
+    none = 0; kept = 0; hostsSkipped = @(); services = @{}; stoppedEarly = $false; seconds = 0
+  }
+
+  # Requests to one host at least MinDelaySeconds apart.
+  $last = @{}
+  $inner = $Fetch
+  $delay = $MinDelaySeconds
+  $throttled = {
+    param([string]$Url, [switch]$Raw)
+    $hostName = ([uri]$Url).Host
+    if ($last.ContainsKey($hostName)) {
+      $wait = $delay - ([DateTime]::UtcNow - $last[$hostName]).TotalSeconds
+      if ($wait -gt 0) { Start-Sleep -Milliseconds ([int]($wait * 1000)) }
+    }
+    try { & $inner $Url -Raw:$Raw } finally { $last[$hostName] = [DateTime]::UtcNow }
+  }.GetNewClosure()
+
+  # Upcoming events by venue, busiest first; ties keep the order venues first appear in.
+  $venues = [ordered]@{}
+  foreach ($event in $Events) {
+    $key = "$($event.venueKey)"
+    if (-not $key) { continue }
+    if (-not $venues.Contains($key)) { $venues[$key] = [ordered]@{ key = $key; venue = "$($event.venue)"; count = 0; pages = [ordered]@{} } }
+    $venues[$key].count++
+    if ($event.url -and -not $venues[$key].pages.Contains("$($event.url)")) { $venues[$key].pages["$($event.url)"] = "$($event.title)" }
+  }
+  # Addresses sources sent without a point, by venue, most often sent first.
+  $feedAddresses = @{}
+  foreach ($raw in $RawEvents) {
+    $address = "$($raw.location.address)"
+    if (-not $address) { continue }
+    $key = "$($raw.venueKey)"
+    if (-not $feedAddresses.ContainsKey($key)) { $feedAddresses[$key] = [ordered]@{} }
+    $feedAddresses[$key][$address] = 1 + [int]$feedAddresses[$key][$address]
+  }
+  $mostGiven = {
+    param($counts)
+    $best = $null
+    foreach ($item in $counts.Keys) { if (-not $best -or $counts[$item] -gt $counts[$best]) { $best = $item } }
+    $best
+  }
+
+  $streetOnly = Get-WkStreetOnlyPattern
+  $rank = @{ none = 0; zip = 1; lookup = 2; address = 3; page = 3 }
+  $queue = @($venues.Values | Where-Object {
+      $entry = $State[$_.key]
+      if ($_.venue -match $streetOnly) { return $false }
+      if (-not $entry) { return $true }
+      switch ("$($entry.from)") {
+        { $_ -in 'none', 'zip', 'lookup' } { return $true }
+        { $_ -in 'page', 'address' } { return "$($entry.checked)" -le $recheckBefore }
+        default { return $false }
+      }
+    } | Sort-Object -Stable -Property @{ Expression = { $_.count }; Descending = $true })
+
+  $robots = @{}
+  $hostFailures = @{}
+  $spent = { $timer.Elapsed.TotalSeconds -ge $BudgetSeconds }
+  $isFailure = { param($err) "$err" -notmatch 'HTTP 4\d\d' }
+
+  foreach ($venue in $queue) {
+    if (& $spent) { $summary.stoppedEarly = $true; break }
+    $summary.tried++
+    $found = [ordered]@{}
+    $read = 0
+    foreach ($url in $venue.pages.Keys) {
+      if ($read -ge $MaxPagesPerVenue) { break }
+      if (& $spent) { break }
+      try { $uri = [uri]$url } catch { continue }
+      if ($uri.Scheme -notin 'http', 'https' -or $uri.Host -match '(^|\.)google\.com$') { continue }
+      $hostName = $uri.Host
+      if ([int]$hostFailures[$hostName] -ge 3) { continue }
+      if (-not $robots.ContainsKey($hostName)) {
+        try {
+          $robots[$hostName] = "$(& $throttled "$($uri.Scheme)://$hostName/robots.txt" -Raw)"
+        } catch {
+          if (& $isFailure $_) {
+            $hostFailures[$hostName] = [int]$hostFailures[$hostName] + 1
+            Write-Warning "robots.txt for $hostName failed: $_"
+            continue
+          }
+          $robots[$hostName] = ''
+        }
+      }
+      if (-not (Test-WkRobotsAllowed $robots[$hostName] $uri.PathAndQuery)) { $summary.robotsSkipped++; continue }
+      $read++
+      try {
+        $html = & $throttled $url -Raw
+        $hostFailures[$hostName] = 0
+        $summary.pages++
+      } catch {
+        if (& $isFailure $_) {
+          $hostFailures[$hostName] = [int]$hostFailures[$hostName] + 1
+          Write-Warning "page for '$($venue.venue)' failed: $_"
+        }
+        continue
+      }
+      $address = Get-WkPageAddress -Html "$html" -Venue $venue.venue -Title $venue.pages[$url]
+      if ($address) { $found[$address] = 1 + [int]$found[$address] }
+    }
+
+    $address = & $mostGiven $found
+    $source = 'page'
+    if (-not $address -and $feedAddresses.ContainsKey($venue.key)) {
+      $address = & $mostGiven $feedAddresses[$venue.key]
+      $source = 'address'
+    }
+    $point = if ($address -and -not (& $spent)) { Find-WkAddressPoint -Address $address -Fetch $throttled -Health $summary.services }
+
+    $new = [ordered]@{}
+    if ($point) {
+      $new.lat = $point.lat
+      $new.lon = $point.lon
+    }
+    if ($address) { $new.address = $address }
+    $new.from = if (-not $point) { 'none' } elseif ($point.from -eq 'zip') { 'zip' } else { $source }
+    $new.checked = $today
+
+    $entry = $State[$venue.key]
+    if ($entry -and $rank["$($entry.from)"] -gt $rank[$new.from] -or ($entry -and $rank["$($entry.from)"] -eq $rank[$new.from] -and $new.from -eq 'none')) {
+      $entry.checked = $today
+      $summary.kept++
+    } else {
+      $State[$venue.key] = $new
+      if ($new.from -eq 'none') { $summary.none++ } else { $summary.found[$new.from]++ }
+    }
+  }
+
+  $summary.hostsSkipped = @($hostFailures.Keys | Where-Object { $hostFailures[$_] -ge 3 } | Sort-Object)
+  $summary.seconds = [int]$timer.Elapsed.TotalSeconds
+  @{ State = $State; Summary = $summary }
 }

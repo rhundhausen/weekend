@@ -159,3 +159,166 @@ Describe 'Find-WkAddressPoint' {
     [int]$health.census | Should -Be 0
   }
 }
+
+Describe 'Update-WkVenueAddresses' {
+  BeforeAll {
+    $script:now = [DateTimeOffset]::Parse('2026-11-29T10:00:00Z')
+
+    function New-Stored([string]$Key, [string]$Venue, [string]$Url, [string]$Title = 'Show') {
+      [pscustomobject]@{ title = $Title; venue = $Venue; venueKey = $Key; city = 'Boise'; url = $Url }
+    }
+
+    # Pages by URL fragment (HTML text), robots.txt allowing all unless -Robots says otherwise,
+    # Census answering one point for any address. Each URL is kept in $script:calls.
+    function New-Fetcher([hashtable]$Pages = @{}, [string]$Robots = '', [string[]]$Throw = @()) {
+      $script:calls = [Collections.Generic.List[string]]::new()
+      $list = $script:calls
+      $hit = [pscustomobject]@{ result = [pscustomobject]@{ addressMatches = @([pscustomobject]@{ coordinates = [pscustomobject]@{ x = -116.2; y = 43.6 } }) } }
+      {
+        param([string]$Url, [switch]$Raw)
+        $list.Add($Url)
+        foreach ($key in $Throw) { if ($Url -like "*$key*") { throw 'Request failed: timed out' } }
+        if ($Url -like '*/robots.txt') { return $Robots }
+        if ($Url -like '*geocoding.geo.census.gov*') { return $hit }
+        foreach ($key in $Pages.Keys) { if ($Url -like "*$key*") { return $Pages[$key] } }
+        throw "HTTP 404 from $Url"
+      }.GetNewClosure()
+    }
+
+    function Invoke-Locate($Events, $Raw = @(), $State = @{}, $Fetch = (New-Fetcher), [int]$Budget = 600) {
+      Update-WkVenueAddresses -Events $Events -RawEvents $Raw -State $State -Now $now -BudgetSeconds $Budget -MinDelaySeconds 0 -Fetch $Fetch
+    }
+
+    $script:page = '<p>See you at Neurolux, 111 N 11th St, Boise, ID 83702.</p>'
+  }
+
+  It 'finds a venue''s address on its event page' {
+    $result = Invoke-Locate @(New-Stored 'neurolux' 'Neurolux' 'https://neurolux.test/e/1') -Fetch (New-Fetcher @{ 'neurolux.test/e/1' = $page })
+    $entry = $result.State['neurolux']
+    $entry.from | Should -Be 'page'
+    $entry.address | Should -Be '111 N 11th St, Boise, ID 83702'
+    $entry.lat | Should -Be 43.6
+    $entry.checked | Should -Be '2026-11-29'
+    $result.Summary.found.page | Should -Be 1
+  }
+
+  It 'uses the address a source sent when the pages have none' {
+    $raw = @([pscustomobject]@{ venueKey = 'hall'; location = [pscustomobject]@{ address = '1 Main St, Boise, ID 83702' } })
+    $entry = (Invoke-Locate @(New-Stored 'hall' 'Hall' 'https://hall.test/e') $raw -Fetch (New-Fetcher @{ 'hall.test/e' = '<p>No address here</p>' })).State['hall']
+    $entry.from | Should -Be 'address'
+    $entry.address | Should -Be '1 Main St, Boise, ID 83702'
+  }
+
+  It 'does not read a page robots.txt disallows' {
+    $fetch = New-Fetcher @{ 'neurolux.test/e/1' = $page } -Robots "User-agent: *`nDisallow: /e/"
+    $result = Invoke-Locate @(New-Stored 'neurolux' 'Neurolux' 'https://neurolux.test/e/1') -Fetch $fetch
+    @($calls | Where-Object { $_ -like '*/e/1' }).Count | Should -Be 0
+    $result.State['neurolux'].from | Should -Be 'none'
+    $result.Summary.robotsSkipped | Should -Be 1
+  }
+
+  It 'skips Google Calendar links' {
+    Invoke-Locate @(New-Stored 'lib' 'Library' 'https://www.google.com/calendar/event?eid=x') | Out-Null
+    @($calls | Where-Object { $_ -like '*google.com*' }).Count | Should -Be 0
+  }
+
+  It 'replaces a name-search entry when it finds an address, and keeps it when it does not' {
+    $state = @{
+      neurolux = [ordered]@{ lat = 43.5; lon = -116.1; from = 'lookup'; checked = '2026-11-23' }
+      other    = [ordered]@{ lat = 43.5; lon = -116.1; from = 'lookup'; checked = '2026-11-23' }
+    }
+    $events = @((New-Stored 'neurolux' 'Neurolux' 'https://neurolux.test/e/1'), (New-Stored 'other' 'Other Hall' 'https://other.test/e'))
+    $after = (Invoke-Locate $events -State $state -Fetch (New-Fetcher @{ 'neurolux.test/e/1' = $page; 'other.test/e' = '<p>nothing</p>' })).State
+    $after['neurolux'].from | Should -Be 'page'
+    $after['other'].from | Should -Be 'lookup'
+    $after['other'].lat | Should -Be 43.5
+    $after['other'].checked | Should -Be '2026-11-29'
+  }
+
+  It 'rechecks a page entry only after 90 days, and keeps it when the page has gone' {
+    $state = @{
+      fresh = [ordered]@{ lat = 43.5; lon = -116.1; address = '1 A St, Boise, ID 83702'; from = 'page'; checked = '2026-11-01' }
+      old   = [ordered]@{ lat = 43.5; lon = -116.1; address = '1 B St, Boise, ID 83702'; from = 'page'; checked = '2026-08-30' }
+    }
+    $events = @((New-Stored 'fresh' 'Fresh Hall' 'https://fresh.test/e'), (New-Stored 'old' 'Old Hall' 'https://old.test/e'))
+    $after = (Invoke-Locate $events -State $state).State
+    @($calls | Where-Object { $_ -like '*fresh.test/e' }).Count | Should -Be 0
+    @($calls | Where-Object { $_ -like '*old.test/e' }).Count | Should -Be 1
+    $after['old'].from | Should -Be 'page'
+    $after['old'].address | Should -Be '1 B St, Boise, ID 83702'
+    $after['old'].checked | Should -Be '2026-11-29'
+  }
+
+  It 'leaves manual, feed, and placeholder entries alone' {
+    $state = @{}
+    foreach ($from in 'manual', 'feed') { $state[$from] = [ordered]@{ lat = 43.5; lon = -116.1; from = $from; checked = '2026-01-01' } }
+    $state['placeholder'] = [ordered]@{ from = 'placeholder'; checked = '2026-01-01' }
+    $events = @('manual', 'feed', 'placeholder' | ForEach-Object { New-Stored $_ "$_ Hall" "https://$_.test/e" })
+    $after = (Invoke-Locate $events -State $state).State
+    $calls.Count | Should -Be 0
+    foreach ($from in 'manual', 'feed', 'placeholder') { $after[$from].checked | Should -Be '2026-01-01' }
+  }
+
+  It 'stops when its time is spent' {
+    $events = @((New-Stored 'a' 'A Hall' 'https://a.test/1'), (New-Stored 'b' 'B Hall' 'https://b.test/1'))
+    $result = Invoke-Locate $events -Budget 0
+    $calls.Count | Should -Be 0
+    $result.Summary.stoppedEarly | Should -BeTrue
+  }
+
+  It 'works on the busiest venue first' {
+    $events = @((New-Stored 'a' 'A Hall' 'https://a.test/1'), (New-Stored 'b' 'B Hall' 'https://b.test/1'), (New-Stored 'b' 'B Hall' 'https://b.test/2'))
+    Invoke-Locate $events | Out-Null
+    @($calls | Where-Object { $_ -notlike '*robots.txt' })[0] | Should -BeLike 'https://b.test/*'
+  }
+
+  It 'reads at most three pages for a venue' {
+    $events = @(1..5 | ForEach-Object { New-Stored 'v' 'V Hall' "https://v.test/$_" })
+    Invoke-Locate $events | Out-Null
+    @($calls | Where-Object { $_ -like 'https://v.test/[0-9]' }).Count | Should -Be 3
+  }
+
+  It 'takes the address most pages give' {
+    $one = '<p>V Hall, 1 A St, Boise, ID 83702</p>'
+    $two = '<p>V Hall, 2 B St, Boise, ID 83702</p>'
+    $events = @(1..3 | ForEach-Object { New-Stored 'v' 'V Hall' "https://v.test/$_" })
+    (Invoke-Locate $events -Fetch (New-Fetcher @{ 'v.test/1' = $one; 'v.test/2' = $two; 'v.test/3' = $two })).State['v'].address | Should -Be '2 B St, Boise, ID 83702'
+  }
+
+  It 'skips a host after three failures in a row and goes on with others' {
+    $events = @((1..3 | ForEach-Object { New-Stored "d$_" "D$_ Hall" "https://down.test/$_" }) + (New-Stored 'z' 'Neurolux' 'https://neurolux.test/e/1') + (New-Stored 'd4' 'D4 Hall' 'https://down.test/4'))
+    $result = Invoke-Locate $events -Fetch (New-Fetcher @{ 'neurolux.test/e/1' = $page } -Throw 'down.test/') 3>$null
+    @($calls | Where-Object { $_ -like 'https://down.test/*' }).Count | Should -Be 3
+    $result.State['z'].from | Should -Be 'page'
+  }
+}
+
+Describe 'addresses read from pages are clean' {
+  BeforeAll {
+    function New-PlacePage($Address) {
+      $node = [ordered]@{ '@context' = 'https://schema.org'; '@type' = 'Place'; name = 'Victory Branch Library'; address = $Address }
+      "<script type=""application/ld+json"">$(ConvertTo-Json $node -Depth 5)</script>"
+    }
+  }
+
+  It 'reads a street field that holds the whole address once' {
+    $address = [ordered]@{ '@type' = 'PostalAddress'; streetAddress = '10664 W Victory Rd, Boise, ID 83709, USA'; addressLocality = 'Boise, ID'; addressRegion = 'Boise, ID' }
+    Get-WkPageAddress -Html (New-PlacePage $address) -Venue 'Victory Branch Library' -Title 'x' | Should -Be '10664 W Victory Rd, Boise, ID 83709'
+  }
+
+  It 'drops empty and repeated parts' {
+    $address = [ordered]@{ '@type' = 'PostalAddress'; streetAddress = '6427 W Ustick Rd,'; addressLocality = 'Boise, ID'; addressRegion = 'Boise, ID' }
+    Get-WkPageAddress -Html (New-PlacePage $address) -Venue 'Victory Branch Library' -Title 'x' | Should -Be '6427 W Ustick Rd, Boise, ID'
+  }
+
+  It 'takes no address without a house number' {
+    $address = [ordered]@{ '@type' = 'PostalAddress'; streetAddress = ''; addressLocality = 'Boise'; addressRegion = 'ID' }
+    Get-WkPageAddress -Html (New-PlacePage $address) -Venue 'Victory Branch Library' -Title 'x' | Should -BeNullOrEmpty
+    Get-WkPageAddress -Html (New-PlacePage 'Boise, ID') -Venue 'Victory Branch Library' -Title 'x' | Should -BeNullOrEmpty
+  }
+
+  It 'decodes HTML entities' {
+    $address = [ordered]@{ '@type' = 'PostalAddress'; streetAddress = '15 Smith &amp; Sons Way'; addressLocality = 'Nampa'; addressRegion = 'ID'; postalCode = '83686' }
+    Get-WkPageAddress -Html (New-PlacePage $address) -Venue 'Victory Branch Library' -Title 'x' | Should -Be '15 Smith & Sons Way, Nampa, ID 83686'
+  }
+}

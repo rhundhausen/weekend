@@ -151,6 +151,15 @@ Describe 'venue location file' {
     (Read-WkVenueLocationState (Join-Path $TestDrive 'missing.json')).Count | Should -Be 0
   }
 
+  It 'accepts page and address entries with a point and rejects them without one' {
+    $good = Join-Path $TestDrive 'page-good.json'
+    [IO.File]::WriteAllText($good, '{ "a": { "lat": 43.6, "lon": -116.2, "address": "1 Main St, Boise, ID 83702", "from": "page", "checked": "2026-11-29" }, "b": { "lat": 43.6, "lon": -116.2, "from": "address", "checked": "2026-11-29" } }')
+    @(Test-WkVenueLocationFile $good) | Should -BeNullOrEmpty
+    $bad = Join-Path $TestDrive 'page-bad.json'
+    [IO.File]::WriteAllText($bad, '{ "a": { "from": "page", "checked": "2026-11-29" } }')
+    @(Test-WkVenueLocationFile $bad).Count | Should -Be 1
+  }
+
   It 'reports a looked-up entry with no point' {
     $path = Join-Path $TestDrive 'bad.json'
     [IO.File]::WriteAllText($path, '{ "v": { "from": "lookup", "checked": "2026-11-23" } }')
