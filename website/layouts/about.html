@@ -83,7 +83,7 @@
 
   <h2 id="map">The map</h2>
   <p>Map shows the events that match your current search and filters. Drag to move around, and pinch or scroll to zoom. Nearby events are grouped into a circle with a count; tap it to zoom in, or tap a pin to see what's happening there.</p>
-  <p>A filled pin is the venue itself. Its location comes from the event's own listing, or from looking the venue up on OpenStreetMap. An outlined pin means we only know the town or ZIP code, so the pin sits at its center. Estate sales and auctions are always shown this way, because {{ $city.siteName }} never stores a home's address.</p>
+  <p>A filled pin is the venue itself. Its location comes from the event's own listing: the point or street address its source sends, or the address on the event's web page. Street addresses are placed with the US Census Bureau's address records. {{ $city.siteName }} never guesses a place from a venue's name. An outlined pin means we only know the town or ZIP code, so the pin sits at its center. Estate sales and auctions are always shown this way, because {{ $city.siteName }} never stores a home's address.</p>
   <p>If you allow it, the map opens where you are. Your location stays in your browser: {{ $city.siteName }} never sends it, stores it, or logs it. If you say no, or you're outside the area, the map shows the whole region instead.</p>
   <p>Map data &copy; <a href="https://www.openstreetmap.org/copyright" rel="noopener" target="_blank">OpenStreetMap contributors</a>, tiles by <a href="https://openfreemap.org" rel="noopener" target="_blank">OpenFreeMap</a>.</p>
 

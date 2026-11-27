@@ -17,7 +17,7 @@ branch: the nightly schedule only runs on the default branch. Add the city's own
 - `data/schema/` with the city's `venue-aliases.json`, `place-cities.json`, and `sizes.json`.
 - `website/wrangler.jsonc`, `website/static/`, `website/data/display.json`, and optionally
   `website/assets/css/skyline.css`.
-- `.github/workflows/ingest.yml`, `refine.yml`, and `test.yml`, each a short caller of this repo's
+- `.github/workflows/ingest.yml`, `refine.yml`, `locate.yml`, and `test.yml`, each a short caller of this repo's
   reusable workflow. Copy them from an existing city and change only the cron hours in
   `ingest.yml` (the two UTC hours midnight falls on in the city's time zone).
 - `README.md` for site owners: who the bot is, how it behaves, and how to opt out. The User-Agent

@@ -68,7 +68,7 @@
 {{- range hugo.Data.events }}
   {{- $spot := slice }}
   {{- with index $venueSpots .venueKey }}
-    {{- if and .lat .lon (in (slice "feed" "lookup" "manual" "zip") .from) }}
+    {{- if and .lat .lon (in (slice "feed" "page" "address" "lookup" "manual" "zip") .from) }}
       {{- $spot = slice (div (math.Round (mul .lat 100000)) 100000.0) (div (math.Round (mul .lon 100000)) 100000.0) (cond (eq .from "zip") 0 1) }}
     {{- end }}
   {{- end }}

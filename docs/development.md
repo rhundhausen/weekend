@@ -135,31 +135,41 @@ the text-based fill-in, refine reads their pages to find the city
 
 ### Venue locations
 
-Refine keeps where each venue is in `data/venue-locations.json`, for the site's map
-(`Update-WkVenueLocations` in `ingestion/scripts/lib/VenueLocations.ps1`; the file is described in
-[schema.md](schema.md), "Venue locations").
+Where each venue is lives in `data/venue-locations.json`, for the site's map (the file is described
+in [schema.md](schema.md), "Venue locations"). Two runs write it:
 
-- **Order:** the coordinates a source sent with the event come first and are trusted. Ticketmaster,
-  Eventbrite, Meetup, tribe, and eventastic send them or an address (`New-WkEvent -Latitude
-  -Longitude -Address`); they ride on the raw events only. Next, OpenStreetMap's Nominatim search,
-  by the source's address or by "venue, town, state", and only an answer within 150 miles of the
-  city counts. Last, the center of the address's ZIP code. The site puts any other event at its
-  town's center (`cityCenters` in `city.json`).
-- **Placeholders:** a venue that isn't one place is never looked up: a `various-` or `-area` key, or
+- **Refine, nightly, no requests** (`Update-WkVenueLocations` in
+  `ingestion/scripts/lib/VenueLocations.ps1`): the coordinates a source sent with the event come
+  first and are trusted (`feed`). Ticketmaster, Eventbrite, Meetup, tribe, and eventastic send
+  them or an address (`New-WkEvent -Latitude -Longitude -Address`); they ride on the raw events
+  only. Refine also marks venues that aren't one place (below). Everything else is locate's.
+- **Locate, weekly** (`ingestion/scripts/Invoke-Locate.ps1`, `lib/VenueAddress.ps1`, the `locate`
+  workflow, Sundays and by hand): for each venue with no entry, `none`, `zip`, or an old `lookup`
+  entry (and `page` or `address` entries 90 days old), busiest first, it reads up to 3 of its
+  events' pages and takes the address they give: schema.org JSON-LD, then microdata, then a street
+  address written just after the venue's name. Each must belong to this event or venue, so a
+  listing page's other events and an organizer's footer address don't count, and must start with
+  a house number. With none, it uses the address a source sent. The US Census Bureau geocoder
+  turns the address into a point (`page` or `address`); with no match, Nominatim's search by the
+  address's parts; with none, the address's ZIP code center (`zip`). It never searches by a
+  venue's name. Finding nothing keeps a point the venue already has. The site puts any other event
+  at its town's center (`cityCenters` in `city.json`).
+- **Placeholders:** a venue that isn't one place is never located: a `various-` or `-area` key, or
   a venue whose events are in more than one town, such as an auction company. Each of its events
   goes to its own town's center, so estate sales never point at a home. A point a source sent
   wins over the town rule, since sources disagree about towns more than about points, and a venue
-  whose events settle in one town again is looked up.
+  whose events settle in one town again loses the mark, so locate takes it up.
 - **Street addresses:** a venue named only by a street address ("7497 W Whisper Rdg Dr") is most
   often a home, so it is a placeholder too, even when a source sent its point, and its address is
   not kept.
-- **Politeness:** 1 second between Nominatim requests, the bot's User-Agent, at most
-  `-VenueLookups` (default 200) requests and `-VenueBudgetSeconds` (default 300) per run, and a
-  stop after three failed requests in a row, so a first fill may take two nights and a slow
-  service never costs the night's refine. A venue not found is tried again after 30 days; a found
-  one is kept. An answer that is a whole town, county, or ZIP code doesn't count, so "Downtown
-  Boise" isn't placed as if it were one spot.
-- **Skipping it:** `-SkipVenueLookup` makes no requests but still records what sources sent.
+- **Politeness:** robots.txt is checked for every page, with the bot's User-Agent, and requests to
+  one host are at least 1 second apart. A host or geocoding service that fails three times in a
+  row is skipped for the rest of the run. A run stops after `-BudgetMinutes` (default 45); the
+  rest wait a week. `out/locate.json` and the run summary count venues tried, pages read, robots
+  skips, and what was found.
+- **Fixing a pin:** set the entry's `lat`, `lon`, and `from` to `manual`; neither run changes it.
+  Venues whose events link only to Google Calendar (the Ada library branches) have no page to
+  read and need this.
 
 ### Link check
 

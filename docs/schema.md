@@ -84,16 +84,16 @@ Some sources, mostly aggregators, give no city, so their events fall back to `Ot
 
 ## Venue locations
 
-`data/venue-locations.json`, written by refine for the site's map (development.md, "Venue locations"), maps each `venueKey` to where the venue is. The JSON Schema is `ingestion/schema/venue-locations.schema.json`.
+`data/venue-locations.json`, written by refine and the weekly locate run for the site's map (development.md, "Venue locations"), maps each `venueKey` to where the venue is. The JSON Schema is `ingestion/schema/venue-locations.schema.json`.
 
 | Field | Notes |
 | --- | --- |
 | `lat`, `lon` | The point, when one is known |
 | `address` | The address a source sent, as "street, town, ST ZIP" |
-| `from` | `feed` (a source sent it), `lookup` (found on OpenStreetMap), `zip` (the center of the address's ZIP code), `manual` (set by hand), `none` (looked up, not found), or `placeholder` (not one place) |
+| `from` | `feed` (a source sent it), `page` (the address on the event's page, geocoded), `address` (the address a source sent, geocoded), `lookup` (found by an older name search; replaced when locate finds an address), `zip` (the center of the address's ZIP code), `manual` (set by hand), `none` (looked up, not found), or `placeholder` (not one place) |
 | `checked` | The day it was last set, `YYYY-MM-DD` |
 
-To fix a pin, edit the venue's entry, give it the right `lat` and `lon`, and set `from` to `manual`: refine never changes a manual entry. Events themselves never store a location. Raw events may carry a `location` (`lat`, `lon`, `address`) from their source, which refine moves here.
+To fix a pin, edit the venue's entry, give it the right `lat` and `lon`, and set `from` to `manual`: neither refine nor locate changes a manual entry. Events themselves never store a location. Raw events may carry a `location` (`lat`, `lon`, `address`) from their source, which refine moves here.
 
 ## Size
 
