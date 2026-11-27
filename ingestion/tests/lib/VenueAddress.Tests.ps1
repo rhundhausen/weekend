@@ -88,3 +88,74 @@ Describe 'Get-WkPageAddress' {
     Get-WkPageAddress -Html $html -Venue 'Neurolux' -Title 'Show' | Should -Be '111 N 11th St, Boise, ID 83702'
   }
 }
+
+Describe 'Find-WkAddressPoint' {
+  BeforeAll {
+    # Answers by URL fragment; anything else is an empty answer. Each URL is kept in $script:calls.
+    function New-Fetcher([hashtable]$Answers = @{}, [string[]]$Throw = @()) {
+      $script:calls = [Collections.Generic.List[string]]::new()
+      $list = $script:calls
+      {
+        param([string]$Url)
+        $list.Add($Url)
+        foreach ($key in $Throw) { if ($Url -like "*$key*") { throw 'Request failed: timed out' } }
+        foreach ($key in $Answers.Keys) { if ($Url -like "*$key*") { return $Answers[$key] } }
+        if ($Url -like '*geocoding.geo.census.gov*') { return [pscustomobject]@{ result = [pscustomobject]@{ addressMatches = @() } } }
+        , @()
+      }.GetNewClosure()
+    }
+    $script:censusHit = [pscustomobject]@{ result = [pscustomobject]@{ addressMatches = @([pscustomobject]@{ coordinates = [pscustomobject]@{ x = -116.2012; y = 43.6033 } }) } }
+    $script:osmHit = , @([pscustomobject]@{ lat = '43.61'; lon = '-116.21'; addresstype = 'building' })
+    $script:zipHit = , @([pscustomobject]@{ lat = '43.62'; lon = '-116.22'; addresstype = 'postcode' })
+  }
+
+  It 'uses the Census geocoder first' {
+    $point = Find-WkAddressPoint -Address '2201 W Cesar Chavez Ln, Boise, ID 83725' -Fetch (New-Fetcher @{ 'geocoding.geo.census.gov' = $censusHit }) -Health @{}
+    $point.lat | Should -Be 43.6033
+    $point.lon | Should -Be -116.2012
+    $point.from | Should -Be 'address'
+    $calls.Count | Should -Be 1
+    $calls[0] | Should -BeLike 'https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address=2201%20W%20Cesar*&benchmark=Public_AR_Current&format=json'
+  }
+
+  It 'asks Nominatim by address parts when Census has no match' {
+    $point = Find-WkAddressPoint -Address '240 E 32nd St, Suite 100, Garden City, ID 83714' -Fetch (New-Fetcher @{ 'street=' = $osmHit }) -Health @{}
+    $point.lat | Should -Be 43.61
+    $point.from | Should -Be 'address'
+    $calls[1] | Should -BeLike 'https://nominatim.openstreetmap.org/search?*street=240%20E%2032nd%20St%2C%20Suite%20100&city=Garden%20City&state=ID&postalcode=83714*'
+    $calls[1] | Should -Not -BeLike '*q=*'
+  }
+
+  It 'falls back to the ZIP code''s center' {
+    $point = Find-WkAddressPoint -Address '9 Nowhere Rd, Boise, ID 83702' -Fetch (New-Fetcher @{ 'postalcode=83702&country' = $zipHit }) -Health @{}
+    $point.from | Should -Be 'zip'
+    $point.lat | Should -Be 43.62
+    $calls.Count | Should -Be 3
+  }
+
+  It 'gives nothing when nothing answers' {
+    Find-WkAddressPoint -Address '9 Nowhere Rd, Boise, ID 83702' -Fetch (New-Fetcher) -Health @{} | Should -BeNullOrEmpty
+  }
+
+  It 'rejects a point far from the city' {
+    $far = [pscustomobject]@{ result = [pscustomobject]@{ addressMatches = @([pscustomobject]@{ coordinates = [pscustomobject]@{ x = -111.89; y = 40.76 } }) } }
+    (Find-WkAddressPoint -Address '1 Main St, Salt Lake City, UT 84101' -Fetch (New-Fetcher @{ 'geocoding.geo.census.gov' = $far }) -Health @{}) | Should -BeNullOrEmpty
+  }
+
+  It 'skips a service after three failures in a row and still asks the others' {
+    $health = @{}
+    $fetch = New-Fetcher @{ 'street=' = $osmHit } -Throw 'geocoding.geo.census.gov'
+    foreach ($i in 1..3) { (Find-WkAddressPoint -Address '1 Main St, Boise, ID 83702' -Fetch $fetch -Health $health 3>$null).from | Should -Be 'address' }
+    $calls.Clear()
+    (Find-WkAddressPoint -Address '1 Main St, Boise, ID 83702' -Fetch $fetch -Health $health).from | Should -Be 'address'
+    @($calls | Where-Object { $_ -like '*census*' }).Count | Should -Be 0
+    $health.census | Should -Be 3
+  }
+
+  It 'does not count a missing page as a failure' {
+    $health = @{}
+    $fetch = { param($Url) throw 'HTTP 404 from x' }
+    foreach ($i in 1..4) { Find-WkAddressPoint -Address '1 Main St, Boise, ID 83702' -Fetch $fetch -Health $health | Out-Null }
+    [int]$health.census | Should -Be 0
+  }
+}

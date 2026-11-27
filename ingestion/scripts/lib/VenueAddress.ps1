@@ -143,3 +143,78 @@ function Get-WkPageAddress {
   }
   $null
 }
+
+function Find-WkAddressPoint {
+  <#
+  .SYNOPSIS
+    A point for a street address: @{ lat; lon; from }, from 'address' for the address itself or
+    'zip' for its ZIP code's center, or $null.
+  .DESCRIPTION
+    Asks, in order: the US Census Bureau geocoder (official street records, free, no key);
+    Nominatim's structured search by the address's parts (never by a name), rejecting answers
+    that are a whole town, county, or ZIP code; Nominatim for the ZIP code's center. A point must
+    be near the city (Test-WkNearCity). -Health counts each service's failures in a row (a
+    timeout, a connection error, a 5xx); at three it is skipped for the rest of the run. A 4xx
+    or an empty answer is not a failure.
+  #>
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory)][string]$Address,
+    [Parameter(Mandatory)][scriptblock]$Fetch,
+    [Parameter(Mandatory)][hashtable]$Health
+  )
+
+  $ask = {
+    param([string]$Service, [string]$Url)
+    if ([int]$Health[$Service] -ge 3) { return $null }
+    try {
+      $answer = & $Fetch $Url
+      $Health[$Service] = 0
+      , $answer
+    } catch {
+      if ("$_" -notmatch 'HTTP 4\d\d') {
+        $Health[$Service] = [int]$Health[$Service] + 1
+        Write-Warning "$Service request failed: $_"
+      }
+      $null
+    }
+  }
+  $near = {
+    param($lat, $lon)
+    $lat = ConvertTo-WkCoordinate $lat
+    $lon = ConvertTo-WkCoordinate $lon
+    if ($null -ne $lat -and $null -ne $lon -and (Test-WkNearCity -Latitude $lat -Longitude $lon)) { @($lat, $lon) }
+  }
+  $escape = { param($text) [uri]::EscapeDataString("$text") }
+
+  $census = & $ask 'census' "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address=$(& $escape $Address)&benchmark=Public_AR_Current&format=json"
+  foreach ($match in @($census.result.addressMatches)) {
+    if (-not $match) { continue }
+    $point = & $near $match.coordinates.y $match.coordinates.x
+    if ($point) { return @{ lat = $point[0]; lon = $point[1]; from = 'address' } }
+  }
+
+  # "street[, unit], town, ST 12345"
+  $parts = @($Address -split '\s*,\s*' | Where-Object { $_ })
+  $zip = if ($Address -match '\b(\d{5})(?:-\d{4})?\s*$') { $Matches[1] }
+  $areaTypes = @('city', 'town', 'village', 'hamlet', 'municipality', 'county', 'state', 'region', 'postcode', 'country')
+  $search = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=us'
+  if ($parts.Count -ge 3) {
+    $stateZip = $parts[-1] -replace '\s*\d{5}(?:-\d{4})?\s*$', ''
+    $query = "street=$(& $escape ($parts[0..($parts.Count - 3)] -join ', '))&city=$(& $escape $parts[-2])&state=$(& $escape $stateZip)"
+    if ($zip) { $query += "&postalcode=$zip" }
+    foreach ($place in @(& $ask 'nominatim' "$search&$query")) {
+      if (-not $place -or "$($place.addresstype)" -in $areaTypes) { continue }
+      $point = & $near $place.lat $place.lon
+      if ($point) { return @{ lat = $point[0]; lon = $point[1]; from = 'address' } }
+    }
+  }
+  if ($zip) {
+    foreach ($place in @(& $ask 'nominatim' "$search&postalcode=$zip&country=us")) {
+      if (-not $place) { continue }
+      $point = & $near $place.lat $place.lon
+      if ($point) { return @{ lat = $point[0]; lon = $point[1]; from = 'zip' } }
+    }
+  }
+  $null
+}
